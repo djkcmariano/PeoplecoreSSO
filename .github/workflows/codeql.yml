@@ -50,6 +50,7 @@ jobs:
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
+          fi
 
       # -------------------------------
       # Detect Python files
@@ -62,6 +63,7 @@ jobs:
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
+          fi
 
       # -------------------------------
       # Detect Ruby files
@@ -74,6 +76,7 @@ jobs:
             echo "found=true" >> $GITHUB_OUTPUT
           else
             echo "found=false" >> $GITHUB_OUTPUT
+          fi
 
       # -------------------------------
       # Skip languages if no files
