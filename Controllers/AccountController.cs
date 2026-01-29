@@ -14,6 +14,48 @@ namespace AuthServer.Controllers
             _authService = authService;
         }
 
+        /// <summary>
+        /// Validates a return URL to prevent open redirects.
+        /// Allows relative URLs and absolute URLs that match the current host.
+        /// Returns null if the URL is not considered safe.
+        /// </summary>
+        /// <param name="returnUrl">The URL provided by the client.</param>
+        /// <returns>A safe URL string or null.</returns>
+        private string ValidateReturnUrl(string returnUrl)
+        {
+            if (string.IsNullOrWhiteSpace(returnUrl))
+            {
+                return null;
+            }
+
+            if (!Uri.TryCreate(returnUrl, UriKind.RelativeOrAbsolute, out var uri))
+            {
+                return null;
+            }
+
+            // Allow relative URLs (no scheme/host) as they stay within this application.
+            if (!uri.IsAbsoluteUri)
+            {
+                return returnUrl;
+            }
+
+            // For absolute URLs, only allow if they match the current request host.
+            var currentHost = Request.Host.Host;
+            var currentPort = Request.Host.Port;
+
+            if (!string.Equals(uri.Host, currentHost, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            if (currentPort.HasValue && uri.Port != currentPort.Value)
+            {
+                return null;
+            }
+
+            return returnUrl;
+        }
+
         // GET: /Account/Login
         [HttpGet]
         public IActionResult Login(string returnUrl = null)
@@ -92,11 +134,12 @@ namespace AuthServer.Controllers
             }
 
             // Redirect after successful login
-            if (!string.IsNullOrEmpty(returnUrl))
+            var safeReturnUrl = ValidateReturnUrl(returnUrl);
+            if (!string.IsNullOrEmpty(safeReturnUrl))
             {
-                return Redirect(returnUrl + "?token=" + result.Token);
+                return Redirect(safeReturnUrl + "?token=" + result.Token);
             }
-            
+
             return Redirect("/?token=" + result.Token);
         }
 
