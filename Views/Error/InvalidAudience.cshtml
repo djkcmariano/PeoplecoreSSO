@@ -1,0 +1,88 @@
+﻿@{
+    ViewData["Title"] = "Audience Not Registered";
+    var message = ViewBag.ErrorMessage ?? "The system ID you’re trying to access is not registered.";
+    var returnUrl = ViewBag.ReturnUrl as string ?? "/";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"]</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Arial, sans-serif;
+            background-color: #f8f9fa;
+            color: #333;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            padding: 40px 30px;
+            max-width: 420px;
+            width: 100%;
+            text-align: center;
+        }
+
+            .card h1 {
+                color: #d9534f;
+                font-size: 1.8rem;
+                margin-bottom: 15px;
+            }
+
+            .card p {
+                font-size: 1rem;
+                color: #555;
+                margin-bottom: 25px;
+                line-height: 1.5;
+            }
+
+        .btn {
+            display: inline-block;
+            background-color: #007bff;
+            color: #fff;
+            text-decoration: none;
+            padding: 10px 25px;
+            border-radius: 5px;
+            transition: background-color 0.2s ease;
+        }
+
+            .btn:hover {
+                background-color: #0056b3;
+            }
+
+
+
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Audience Not Registered</h1>
+        <p>@message</p>
+        <a href="@returnUrl" class="btn" id="goHomeBtn">Go Home</a>
+    </div>
+
+    <script>
+        // Fallback: If no return URL, use previous page or home
+        document.getElementById("goHomeBtn").addEventListener("click", function (e) {
+            const href = this.getAttribute("href");
+            if (!href || href === "/") {
+                e.preventDefault();
+                if (document.referrer) {
+                    window.location.href = document.referrer;
+                } else {
+                    window.location.href = "/";
+                }
+            }
+        });
+    </script>
+</body>
+</html>
