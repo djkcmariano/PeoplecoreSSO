@@ -1,21 +1,19 @@
-name: "Full SAST + Dependency Scan"
+name: "SAST + Leaks Scan"
 
 on:
   push:
     branches: [ "main", "develop" ]
   pull_request:
     branches: [ "main", "develop" ]
-  schedule:
-    - cron: '25 16 * * 4'
 
 jobs:
 
   # -------------------
-  # CodeQL Analysis
+  # 1️⃣ CodeQL Analysis
   # -------------------
   codeql:
-    name: CodeQL Analysis (${{ matrix.language }})
-    runs-on: ${{ (matrix.language == 'swift' && 'macos-latest') || 'ubuntu-latest' }}
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
       packages: read
@@ -26,8 +24,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - language: actions
-            build-mode: none
           - language: csharp
             build-mode: manual
           - language: javascript-typescript
@@ -36,41 +32,73 @@ jobs:
             build-mode: none
           - language: ruby
             build-mode: none
+          - language: actions
+            build-mode: none
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Skip JS/TS if no files
-      - name: Skip JS/TS if none
+      # -------------------------------
+      # Detect JS/TS files
+      # -------------------------------
+      - name: Detect JS/TS files
+        id: check_js
         if: matrix.language == 'javascript-typescript'
-        continue-on-error: true
         run: |
-          if ! git ls-files '*.js' '*.ts' | grep -q .; then
-            echo "No JS/TS files found. Skipping CodeQL."
-            exit 78
-          fi
+          if git ls-files '*.js' '*.ts' | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
 
-      # Skip Python if no files
-      - name: Skip Python if none
+      # -------------------------------
+      # Detect Python files
+      # -------------------------------
+      - name: Detect Python files
+        id: check_py
         if: matrix.language == 'python'
-        continue-on-error: true
         run: |
-          if ! git ls-files '*.py' | grep -q .; then
-            echo "No Python files found. Skipping CodeQL."
-            exit 78
-          fi
+          if git ls-files '*.py' | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
 
-      # Skip Ruby if none
-      - name: Skip Ruby if none
+      # -------------------------------
+      # Detect Ruby files
+      # -------------------------------
+      - name: Detect Ruby files
+        id: check_rb
         if: matrix.language == 'ruby'
-        continue-on-error: true
         run: |
-          if ! git ls-files '*.rb' | grep -q .; then
-            echo "No Ruby files found. Skipping CodeQL."
-            exit 78
-          fi
+          if git ls-files '*.rb' | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
 
+      # -------------------------------
+      # Skip languages if no files
+      # -------------------------------
+      - name: Skip JS/TS if no files
+        if: matrix.language == 'javascript-typescript' && steps.check_js.outputs.found == 'false'
+        run: |
+          echo "No JS/TS files found. Skipping CodeQL."
+          exit 78
+
+      - name: Skip Python if no files
+        if: matrix.language == 'python' && steps.check_py.outputs.found == 'false'
+        run: |
+          echo "No Python files found. Skipping CodeQL."
+          exit 78
+
+      - name: Skip Ruby if no files
+        if: matrix.language == 'ruby' && steps.check_rb.outputs.found == 'false'
+        run: |
+          echo "No Ruby files found. Skipping CodeQL."
+          exit 78
+
+      # -------------------------------
+      # Initialize CodeQL
+      # -------------------------------
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -78,39 +106,48 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended,security-and-quality
 
+      # -------------------------------
+      # Build C# solution if needed
+      # -------------------------------
       - name: Build C# Solution
-        if: matrix.build-mode == 'manual'
-        shell: bash
+        if: matrix.language == 'csharp' && matrix.build-mode == 'manual'
         run: |
-          dotnet restore 
+          dotnet restore
           dotnet build --configuration Release
 
+      # -------------------------------
+      # Run CodeQL Analysis
+      # -------------------------------
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{matrix.language}}"
 
   # -------------------
-  # Semgrep Scan
+  # 2️⃣ Semgrep Scan (runs in parallel)
   # -------------------
   semgrep:
     name: Semgrep Scan
     runs-on: ubuntu-latest
-    needs: []
     steps:
       - uses: actions/checkout@v4
-      - name: Run Semgrep
-        uses: returntocorp/semgrep-action@v2
+
+      - name: Run Semgrep on all files including .cshtml
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep semgrep --config auto --error --sarif --output /src/semgrep-results.sarif
+
+      - name: Upload Semgrep SARIF
+        uses: github/codeql-action/upload-sarif@v2
         with:
-          config: "auto"
+          sarif_file: semgrep-results.sarif
+          category: semgrep
 
   # -------------------
-  # Gitleaks Secrets Scan
+  # 3️⃣ Gitleaks Scan (runs in parallel)
   # -------------------
   gitleaks:
     name: Gitleaks Scan
     runs-on: ubuntu-latest
-    needs: []
     steps:
       - uses: actions/checkout@v4
       - name: Run Gitleaks
