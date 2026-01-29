@@ -38,12 +38,13 @@ namespace AuthServer.Services
 
             throw new InvalidOperationException($"Audience not registered for SystemID: {systemID}");
         }
-        public LoginResponseModel Authenticate(UserModel login, string callerUrl)
+        //public LoginResponseModel Authenticate(UserModel login, string callerUrl)
+        public LoginResponseModel Authenticate( string username, string password, int payLocNo, string callerUrl )
         {
 
             
 
-            var dt = SQLHelp.ExecuteDataTable("SUser_WebLoginAPI", new SqlParameter("@username", Generic.ToStr(login.Username)),new SqlParameter("@xPayLocNo", Generic.ToInt(login.PayLocNo)));
+            var dt = SQLHelp.ExecuteDataTable("SUser_WebLoginAPI", new SqlParameter("@username", Generic.ToStr(username)),new SqlParameter("@xPayLocNo", Generic.ToInt(payLocNo)));
             if (dt == null || dt.Rows.Count == 0)
                 return new LoginResponseModel { Success = false, XMessage = "Invalid username or password." };
 
@@ -60,7 +61,7 @@ namespace AuthServer.Services
                 PwdStatus = Generic.ToInt(row["PwdStatus"]),
                 XMessage = Generic.ToStr(row["xMessage"]),
                 EmployeeNumber = Generic.ToStr(row["EmployeeNumber"]),
-                CompanyCode = login.PayLocNo
+                CompanyCode = payLocNo
             };
 
             if (!string.IsNullOrEmpty(response.XMessage))
@@ -69,7 +70,7 @@ namespace AuthServer.Services
             if (response.IsLock)
                 return new LoginResponseModel { Success = false, XMessage = "Account is locked." };
 
-            if (login.Password != decryptedPassword)
+            if (password != decryptedPassword)
                 return new LoginResponseModel { Success = false, XMessage = "Invalid password." };
 
             string issuer = GetServerBaseUrl();

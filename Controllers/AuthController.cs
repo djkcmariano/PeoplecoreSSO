@@ -18,7 +18,7 @@ namespace AuthServer.Controllers
 
         [AllowAnonymous]
         [HttpPost("login")]
-        public IActionResult Login([FromBody] UserModel login)
+        public IActionResult Login([FromBody] LoginRequest login)
         {
             if (login == null ||
                 string.IsNullOrWhiteSpace(login.Username) ||
@@ -40,8 +40,14 @@ namespace AuthServer.Controllers
                 return BadRequest(ex.Message);
             }
 
-            
-            var result = _authService.Authenticate(login, callerUrl);
+
+            //var result = _authService.Authenticate(login, callerUrl);
+            var result = _authService.Authenticate(
+                                                    login.Username!,
+                                                    login.Password!,
+                                                    login.PayLocNo,
+                                                    callerUrl
+                                                );
 
             if (result == null)
                 return Unauthorized(new { success = false, message = "Invalid username or password." });

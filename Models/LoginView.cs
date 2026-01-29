@@ -1,9 +1,8 @@
 ﻿namespace AuthServer.Models
 {
-    public class LoginRequest
+    public class LoginView
     {
         public string? Username { get; set; }
         public string? Password { get; set; }
-        public int PayLocNo { get; set; }
     }
 }

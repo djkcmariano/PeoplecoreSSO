@@ -123,7 +123,7 @@ namespace AuthServer.Controllers
         // POST: /Account/Login
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public IActionResult Login(UserModel model, string returnUrl = null)
+        public IActionResult Login(LoginRequest model, string returnUrl = null)
         {
             // Check for missing username/password
             if (string.IsNullOrWhiteSpace(model.Username) || string.IsNullOrWhiteSpace(model.Password))
@@ -134,7 +134,7 @@ namespace AuthServer.Controllers
             var callerUrl = Request.Query["ReturnUrl"].ToString();
 
             // Authenticate via your AuthService
-            var result = _authService.Authenticate(model, callerUrl);
+            var result = _authService.Authenticate(model.Username!,model.Password!,model.PayLocNo, callerUrl);
 
             if (result == null || !result.Success)
             {
