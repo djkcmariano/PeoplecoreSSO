@@ -1,0 +1,14 @@
+﻿################################################################################
+# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+################################################################################
+
+/obj/Debug/net8.0/.NETCoreApp,Version=v8.0.AssemblyAttributes.cs
+/obj/Debug/net8.0/AuthServer.AssemblyInfo.cs
+/obj/Debug/net8.0/AuthServer.AssemblyInfoInputs.cache
+/obj/Debug/net8.0/AuthServer.csproj.AssemblyReference.cache
+/obj/Debug/net8.0/AuthServer.GeneratedMSBuildEditorConfig.editorconfig
+/obj/Debug/net8.0/AuthServer.GlobalUsings.g.cs
+/obj/Debug/net8.0/AuthServer.RazorAssemblyInfo.cache
+/obj/Debug/net8.0/AuthServer.RazorAssemblyInfo.cs
+/obj/Debug/net8.0/rpswa.dswa.cache.json
+/obj/Debug/net8.0/staticwebassets.removed.txt
