@@ -401,6 +401,7 @@ D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.MvcApplicatio
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.MvcApplicationPartsAssemblyInfo.cache
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.RazorAssemblyInfo.cache
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.RazorAssemblyInfo.cs
+D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.sourcelink.json
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\rjimswa.dswa.cache.json
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\rjsmrazor.dswa.cache.json
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\rjsmcshtml.dswa.cache.json
@@ -409,10 +410,10 @@ D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\staticwebassets.build.js
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\staticwebassets.build.json.cache
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\staticwebassets.development.json
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\staticwebassets.build.endpoints.json
+D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.csproj.Up2Date
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.dll
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\refint\AuthServer.dll
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.pdb
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\AuthServer.genruntimeconfig.cache
 D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\ref\AuthServer.dll
-D:\PROJECT FILES\AuthServer\AuthServer\obj\Debug\net8.0\staticwebassets.upToDateCheck.txt
