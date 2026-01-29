@@ -1,4 +1,4 @@
-name: "SAST + Leaks Scan"
+name: "SAST + Secrets Parallel Scan"
 
 on:
   push:
@@ -25,7 +25,7 @@ jobs:
       matrix:
         include:
           - language: csharp
-            build-mode: manual
+            build-mode: none
           - language: javascript-typescript
             build-mode: none
           - language: python
@@ -79,47 +79,23 @@ jobs:
           fi
 
       # -------------------------------
-      # Skip languages if no files
-      # -------------------------------
-      - name: Skip JS/TS if no files
-        if: matrix.language == 'javascript-typescript' && steps.check_js.outputs.found == 'false'
-        run: |
-          echo "No JS/TS files found. Skipping CodeQL."
-          exit 78
-
-      - name: Skip Python if no files
-        if: matrix.language == 'python' && steps.check_py.outputs.found == 'false'
-        run: |
-          echo "No Python files found. Skipping CodeQL."
-          exit 78
-
-      - name: Skip Ruby if no files
-        if: matrix.language == 'ruby' && steps.check_rb.outputs.found == 'false'
-        run: |
-          echo "No Ruby files found. Skipping CodeQL."
-          exit 78
-
-      # -------------------------------
-      # Initialize CodeQL
+      # Initialize CodeQL only if files exist
       # -------------------------------
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
+        if: >
+          matrix.language == 'csharp' ||
+          (matrix.language == 'javascript-typescript' && steps.check_js.outputs.found == 'true') ||
+          (matrix.language == 'python' && steps.check_py.outputs.found == 'true') ||
+          (matrix.language == 'ruby' && steps.check_rb.outputs.found == 'true') ||
+          matrix.language == 'actions'
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended,security-and-quality
 
       # -------------------------------
-      # Build C# solution if needed
-      # -------------------------------
-      - name: Build C# Solution
-        if: matrix.language == 'csharp' && matrix.build-mode == 'manual'
-        run: |
-          dotnet restore
-          dotnet build --configuration Release
-
-      # -------------------------------
-      # Run CodeQL Analysis
+      # Perform CodeQL Analysis
       # -------------------------------
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
@@ -127,7 +103,7 @@ jobs:
           category: "/language:${{matrix.language}}"
 
   # -------------------
-  # 2️⃣ Semgrep Scan (runs in parallel)
+  # 2️⃣ Semgrep Scan (parallel)
   # -------------------
   semgrep:
     name: Semgrep Scan
@@ -135,18 +111,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # -------------------------------
+      # Detect .cshtml files to optionally skip Semgrep
+      # -------------------------------
+      - name: Detect .cshtml files
+        id: check_cshtml
+        run: |
+          if git ls-files '*.cshtml' | grep -q .; then
+            echo "found=true" >> $GITHUB_OUTPUT
+          else
+            echo "found=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Run Semgrep on all files including .cshtml
+        if: steps.check_cshtml.outputs.found == 'true'
         run: |
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep semgrep --config auto --error --sarif --output /src/semgrep-results.sarif
 
       - name: Upload Semgrep SARIF
+        if: steps.check_cshtml.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v2
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
 
   # -------------------
-  # 3️⃣ Gitleaks Scan (runs in parallel)
+  # 3️⃣ Gitleaks Scan (parallel)
   # -------------------
   gitleaks:
     name: Gitleaks Scan
