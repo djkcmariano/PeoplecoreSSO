@@ -37,6 +37,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # Skip JS/TS if no files
+      - name: Skip JS/TS if none
+        if: matrix.language == 'javascript-typescript'
+        run: |
+          if ! git ls-files '*.js' '*.ts' | grep -q .; then
+            echo "No JS/TS files found. Skipping CodeQL."
+            exit 78
+          fi
+
+      # Skip Python if no files
+      - name: Skip Python if none
+        if: matrix.language == 'python'
+        run: |
+          if ! git ls-files '*.py' | grep -q .; then
+            echo "No Python files found. Skipping CodeQL."
+            exit 78
+          fi
+
+      # Skip Ruby if no files
+      - name: Skip Ruby if none
+        if: matrix.language == 'ruby'
+        run: |
+          if ! git ls-files '*.rb' | grep -q .; then
+            echo "No Ruby files found. Skipping CodeQL."
+            exit 78
+          fi
+
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
@@ -48,7 +75,7 @@ jobs:
         if: matrix.build-mode == 'manual'
         shell: bash
         run: |
-          dotnet restore 
+          dotnet restore
           dotnet build --configuration Release
 
       - name: Perform CodeQL Analysis
