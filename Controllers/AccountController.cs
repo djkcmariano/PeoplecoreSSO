@@ -2,6 +2,7 @@
 using AuthServer.Models;
 using AuthServer.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 
 namespace AuthServer.Controllers
 {
@@ -16,7 +17,8 @@ namespace AuthServer.Controllers
 
         /// <summary>
         /// Validates a return URL to prevent open redirects.
-        /// Allows relative URLs and absolute URLs that match the current host.
+        /// Allows relative URLs that are local to this application and absolute URLs
+        /// that match the current scheme, host and port.
         /// Returns null if the URL is not considered safe.
         /// </summary>
         /// <param name="returnUrl">The URL provided by the client.</param>
@@ -28,20 +30,27 @@ namespace AuthServer.Controllers
                 return null;
             }
 
-            if (!Uri.TryCreate(returnUrl, UriKind.RelativeOrAbsolute, out var uri))
-            {
-                return null;
-            }
-
-            // Allow relative URLs (no scheme/host) as they stay within this application.
-            if (!uri.IsAbsoluteUri)
+            // Prefer the built-in check for local/relative URLs.
+            if (Url != null && Url.IsLocalUrl(returnUrl))
             {
                 return returnUrl;
             }
 
-            // For absolute URLs, only allow if they match the current request host.
-            var currentHost = Request.Host.Host;
-            var currentPort = Request.Host.Port;
+            // Fallback for absolute URLs: require same scheme, host and port.
+            if (!Uri.TryCreate(returnUrl, UriKind.Absolute, out var uri))
+            {
+                return null;
+            }
+
+            var currentScheme = Request.Scheme;
+            var currentHostString = Request.Host;
+            var currentHost = currentHostString.Host;
+            var currentPort = currentHostString.Port;
+
+            if (!string.Equals(uri.Scheme, currentScheme, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
 
             if (!string.Equals(uri.Host, currentHost, StringComparison.OrdinalIgnoreCase))
             {
@@ -137,7 +146,26 @@ namespace AuthServer.Controllers
             var safeReturnUrl = ValidateReturnUrl(returnUrl);
             if (!string.IsNullOrEmpty(safeReturnUrl))
             {
-                return Redirect(safeReturnUrl + "?token=" + result.Token);
+                string redirectUrl;
+
+                if (Uri.TryCreate(safeReturnUrl, UriKind.Absolute, out var absoluteUri))
+                {
+                    // Absolute URL: safely append the token as a query parameter.
+                    var builder = new UriBuilder(absoluteUri);
+                    var query = string.IsNullOrEmpty(builder.Query)
+                        ? string.Empty
+                        : builder.Query.TrimStart('?') + "&";
+                    query += "token=" + Uri.EscapeDataString(result.Token);
+                    builder.Query = query;
+                    redirectUrl = builder.Uri.ToString();
+                }
+                else
+                {
+                    // Relative/local URL: safely append the token as a query parameter.
+                    redirectUrl = QueryHelpers.AddQueryString(safeReturnUrl, "token", result.Token);
+                }
+
+                return Redirect(redirectUrl);
             }
 
             return Redirect("/?token=" + result.Token);
