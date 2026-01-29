@@ -40,6 +40,7 @@ jobs:
       # Skip JS/TS if no files
       - name: Skip JS/TS if none
         if: matrix.language == 'javascript-typescript'
+        continue-on-error: true
         run: |
           if ! git ls-files '*.js' '*.ts' | grep -q .; then
             echo "No JS/TS files found. Skipping CodeQL."
@@ -58,6 +59,7 @@ jobs:
       # Skip Ruby if no files
       - name: Skip Ruby if none
         if: matrix.language == 'ruby'
+        continue-on-error: true
         run: |
           if ! git ls-files '*.rb' | grep -q .; then
             echo "No Ruby files found. Skipping CodeQL."
