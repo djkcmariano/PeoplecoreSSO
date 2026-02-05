@@ -155,15 +155,25 @@ jobs:
     strategy:
       matrix:
         scan-type: [release, source, stage, build]
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
   
       # -----------------------------
+      # Setup Java 8
+      # -----------------------------
+      - name: Setup Java 8
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 8
+  
+      # -----------------------------
       # Ensure nuget.exe is present
       # -----------------------------
       - name: Download NuGet CLI if missing
-        shell: powershell
+        shell: pwsh
         run: |
           if (-not (Test-Path "nuget.exe")) {
               Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "nuget.exe"
@@ -187,6 +197,7 @@ jobs:
       # Run Nexus IQ Scan
       # -----------------------------
       - name: Run Nexus IQ Scan
+        shell: pwsh
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
@@ -207,7 +218,6 @@ jobs:
         with:
           name: iq-json-${{ matrix.scan-type }}
           path: iq-results-${{ matrix.scan-type }}.json
-
 
   # -------------------
   # 3️⃣ Optional Deploy
