@@ -161,6 +161,7 @@ jobs:
   
       # Ensure nuget.exe exists
       - name: Download NuGet CLI
+        shell: powershell
         run: |
           if (-not (Test-Path "nuget.exe")) {
               Write-Host "Downloading nuget.exe..."
