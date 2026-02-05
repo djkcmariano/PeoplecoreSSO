@@ -102,6 +102,8 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          scan: "pr"          # mandatory for pull_request events
+          verbose: true
 
   # -------------------
   # 3️⃣ Optional Deploy
