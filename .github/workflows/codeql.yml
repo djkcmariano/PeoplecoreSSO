@@ -152,19 +152,34 @@ jobs:
     name: Nexus Lifecycle Scan
     runs-on: self-hosted
     needs: build-test
+  
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
   
-      - name: Run Nexus Lifecycle Scan (AllSigned-safe)
+      # -----------------------------
+      # Download Nexus IQ CLI (no admin)
+      # -----------------------------
+      - name: Download Nexus IQ CLI
+        shell: cmd
+        run: |
+          mkdir iqcli
+          curl -L -o iqcli\iqcli.zip https://download.sonatype.com/clm/scanner/latest.zip
+          tar -xf iqcli\iqcli.zip -C iqcli
+  
+      # -----------------------------
+      # Run Nexus Lifecycle Scan
+      # -----------------------------
+      - name: Run Nexus Lifecycle Scan
         shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
           powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
-            "iqcli -s http://192.168.70.35:8070 ^
+            "& '$PWD\iqcli\iq-cli\bin\iqcli.exe' ^
+              -s http://192.168.70.35:8070 ^
               -a $env:IQ_USER`:$env:IQ_PASS ^
               -i my-app ^
               -t build ^
@@ -174,6 +189,9 @@ jobs:
                exit 1 ^
              }"
   
+      # -----------------------------
+      # Upload Results
+      # -----------------------------
       - name: Upload Nexus Lifecycle JSON
         uses: actions/upload-artifact@v4
         with:
