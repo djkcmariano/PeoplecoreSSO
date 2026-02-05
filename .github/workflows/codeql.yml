@@ -187,10 +187,10 @@ jobs:
           set PROJ="%GITHUB_WORKSPACE%\AuthServer.csproj"
           set OUT="%GITHUB_WORKSPACE%"
   
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t source  "%GITHUB_WORKSPACE%\AuthServer.csproj"
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t build  " %GITHUB_WORKSPACE%\AuthServer.csproj"
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t stage-release   "%GITHUB_WORKSPACE%\AuthServer.csproj"
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t release "%GITHUB_WORKSPACE%\AuthServer.csproj"
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t source  "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-source.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t build  " %GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-build.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t stage-release   "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-stage-release.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t release "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-release.json
   
       - name: Upload Nexus IQ Reports
         uses: actions/upload-artifact@v4
