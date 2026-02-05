@@ -148,6 +148,9 @@ jobs:
           verbose: true
           args: --report-format=json --report-path=gitleaks-results.json
 
+  # -------------------
+  # 2️⃣ Nexus Lifecycle Scan
+  # -------------------
   nexus-lifecycle:
     name: Nexus Lifecycle Scan
     runs-on: self-hosted
@@ -155,28 +158,30 @@ jobs:
     strategy:
       matrix:
         scan-type: [release, source, stage, build]
-  
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-  
+          submodules: false
+          lfs: false
+
       - name: Ensure NuGet CLI
         shell: cmd
         run: |
           if not exist nuget.exe (
             curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
           )
-  
+
       - name: Restore NuGet Packages
         shell: cmd
         run: nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
-  
+
       - name: Build Project
         shell: cmd
         run: dotnet build AuthServer.csproj --configuration Release --no-restore
-  
+
       - name: Run Nexus IQ Scan
         shell: cmd
         env:
@@ -186,7 +191,7 @@ jobs:
         run: |
           cd AuthServer
           java -jar ..\tools\cli.jar -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t %SCAN_TYPE% AuthServer.csproj -o ..\iq-results-%SCAN_TYPE%.json
-  
+
       - name: Upload Nexus IQ JSON
         uses: actions/upload-artifact@v4
         with:
