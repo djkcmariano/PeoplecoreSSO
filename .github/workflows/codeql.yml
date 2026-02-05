@@ -157,26 +157,20 @@ jobs:
         with:
           fetch-depth: 0
   
-      - name: Run Nexus Lifecycle Scan
+      - name: Run Nexus Lifecycle Scan inline
         shell: powershell
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
-          # --- Bypass script signing for this process ---
           Set-ExecutionPolicy Bypass -Scope Process -Force
-  
-          # --- Define temp path for script ---
-          $scriptPath = "$env:RUNNER_TEMP\nexus-scan.ps1"
-  
-          # --- Write script inline to a temporary .ps1 file ---
-          @"
+      
           iqcli -s http://192.168.70.35:8070 `
                 -a $env:IQ_USER:$env:IQ_PASS `
                 -i my-app `
                 -t build `
                 -o json > iq-results.json
-  
+      
           if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
               Write-Host "Critical Nexus Lifecycle policy violations detected!"
               exit 1
