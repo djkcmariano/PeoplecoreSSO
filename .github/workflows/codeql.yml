@@ -150,74 +150,63 @@ jobs:
 
   nexus-lifecycle:
     name: Nexus Lifecycle Scan
-    runs-on: windows-latest
+    runs-on: self-hosted
     needs: build-test
     strategy:
       matrix:
         scan-type: [release, source, stage, build]
   
     steps:
+      # -----------------------------
+      # Checkout repo
+      # -----------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
   
       # -----------------------------
-      # Setup Java 8
-      # -----------------------------
-      - name: Setup Java 8
-        uses: actions/setup-java@v3
-        with:
-          distribution: temurin
-          java-version: 8
-  
-      # -----------------------------
       # Ensure nuget.exe is present
       # -----------------------------
-      - name: Download NuGet CLI if missing
-        shell: pwsh
+      - name: Ensure NuGet CLI
+        shell: cmd
         run: |
-          if (-not (Test-Path "nuget.exe")) {
-              Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "nuget.exe"
-          }
+          if not exist nuget.exe (
+            curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+          )
   
       # -----------------------------
       # Restore NuGet packages
       # -----------------------------
       - name: Restore NuGet Packages
-        run: |
-          nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
+        shell: cmd
+        run: nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
   
       # -----------------------------
       # Build the project
       # -----------------------------
       - name: Build Project
-        run: |
-          dotnet build AuthServer.csproj --configuration Release
+        shell: cmd
+        run: dotnet build AuthServer.csproj --configuration Release --no-restore
   
       # -----------------------------
-      # Run Nexus IQ Scan
+      # Run Nexus IQ CLI
       # -----------------------------
       - name: Run Nexus IQ Scan
-        shell: pwsh
+        shell: cmd
         env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
+          IQ_USER: %IQ_USER%
+          IQ_PASS: %IQ_PASS%
         run: |
-          java -jar tools/cli.jar `
-            -i "AuthServer" `
-            -s http://192.168.70.35:8070 `
-            -a $env:IQ_USER:$env:IQ_PASS `
-            -t ${{ matrix.scan-type }} `
-            AuthServer.csproj `
-            -o json > iq-results-${{ matrix.scan-type }}.json
+          cd AuthServer
+          java -jar ..\tools\cli.jar -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t %{{ matrix.scan-type }} AuthServer.csproj -o ..\iq-results-%{{ matrix.scan-type }}.json
   
       # -----------------------------
-      # Upload Scan JSON Artifact
+      # Upload JSON artifact
       # -----------------------------
       - name: Upload Nexus IQ JSON
         uses: actions/upload-artifact@v4
         with:
-          name: iq-json-${{ matrix.scan-type }}
-          path: iq-results-${{ matrix.scan-type }}.json
+          name: iq-json-%{{ matrix.scan-type }}
+          path: iq-results-%{{ matrix.scan-type }}.json
 
   # -------------------
   # 3️⃣ Optional Deploy
