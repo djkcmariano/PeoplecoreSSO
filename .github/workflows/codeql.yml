@@ -172,12 +172,12 @@ jobs:
       # Restore packages
       - name: Restore NuGet Packages
         run: |
-          nuget.exe restore MyProject.csproj -PackagesDirectory Packages
+          nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
   
       # Build project
       - name: Build Project
         run: |
-          msbuild MyProject.csproj /t:Build /p:Configuration=Release
+          msbuild AuthServer.csproj /t:Build /p:Configuration=Release
   
       # Run Nexus IQ Scan
       - name: Run Nexus IQ Scan
@@ -186,11 +186,11 @@ jobs:
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
           java -jar tools/cli.jar `
-            -i "MyProject" `
+            -i "PeoplecoreAuthServer" `
             -s http://192.168.70.35:8070 `
             -a $env:IQ_USER:$env:IQ_PASS `
             -t ${{ matrix.scan-type }} `
-            MyProject.csproj `
+            AuthServer.csproj `
             -o json > iq-results-${{ matrix.scan-type }}.json
   
       # Upload JSON
