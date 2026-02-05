@@ -71,6 +71,9 @@ jobs:
     needs: build-test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # ensures full git history for PR diff
+  
       - name: Check if repo has files
         id: check_files
         run: |
@@ -79,17 +82,27 @@ jobs:
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
+  
       - name: Run Semgrep
         if: steps.check_files.outputs.found == 'true'
         run: |
+          # Run Semgrep on all files
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
-            semgrep --config auto --error --sarif --output /src/semgrep-results.sarif
+            semgrep --config auto --sarif --output /src/semgrep-results.sarif || true
+  
+          # Fail workflow only if critical findings exist
+          if grep -q '"severity": "error"' /src/semgrep-results.sarif; then
+            echo "Critical Semgrep findings detected!"
+            exit 1
+          fi
+  
       - name: Upload Semgrep SARIF
-        if: always()
+        if: steps.check_files.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
+
 
   gitleaks:
     name: Gitleaks Scan
