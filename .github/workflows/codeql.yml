@@ -157,35 +157,28 @@ jobs:
         with:
           fetch-depth: 0
   
-      - name: Run Nexus Lifecycle Scan inline
-        shell: powershell
+      - name: Run Nexus Lifecycle Scan (AllSigned-safe)
+        shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
-          Set-ExecutionPolicy Bypass -Scope Process -Force
-      
-          iqcli -s http://192.168.70.35:8070 `
-                -a $env:IQ_USER:$env:IQ_PASS `
-                -i my-app `
-                -t build `
-                -o json > iq-results.json
-      
-          if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
-              Write-Host "Critical Nexus Lifecycle policy violations detected!"
-              exit 1
-          }
-          "@ | Out-File -FilePath $scriptPath -Encoding UTF8
-  
-          # --- Run the temp script with bypass ---
-          powershell.exe -ExecutionPolicy Bypass -File $scriptPath
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -Command ^
+            "iqcli -s http://192.168.70.35:8070 ^
+              -a $env:IQ_USER`:$env:IQ_PASS ^
+              -i my-app ^
+              -t build ^
+              -o json > iq-results.json; ^
+             if (Select-String -Path iq-results.json -Pattern 'Critical Policy Violation') { ^
+               Write-Host 'Critical Nexus Lifecycle policy violations detected!'; ^
+               exit 1 ^
+             }"
   
       - name: Upload Nexus Lifecycle JSON
         uses: actions/upload-artifact@v4
         with:
           name: iq-json
           path: iq-results.json
-
 
 
   # -------------------
