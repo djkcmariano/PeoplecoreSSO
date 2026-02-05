@@ -75,8 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-
+          fetch-depth: 0  # ensures full git history for PR diff
+  
       - name: Check if repo has files
         id: check_files
         run: |
@@ -85,34 +85,45 @@ jobs:
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
-
+  
       - name: Run Semgrep
         if: steps.check_files.outputs.found == 'true'
         run: |
+          # -----------------------------
+          # 1️⃣ Run Semgrep and generate JSON
+          # -----------------------------
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
-            semgrep --config auto \
-                    --sarif --json \
-                    --output /src/semgrep-results.sarif \
-                    --json-output /src/semgrep-results.json || true
-
+            semgrep --config auto --json --output /src/semgrep-results.json || true
+  
+          # -----------------------------
+          # 2️⃣ Convert JSON → SARIF for GitHub Security
+          # -----------------------------
+          docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
+            semgrep-sarif /src/semgrep-results.json /src/semgrep-results.sarif || true
+  
+          # -----------------------------
+          # 3️⃣ Fail workflow only if critical findings exist
+          # -----------------------------
           if grep -q '"severity": "error"' /src/semgrep-results.json; then
             echo "Critical Semgrep findings detected!"
             exit 1
           fi
-
+  
       - name: Upload Semgrep SARIF
         if: steps.check_files.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
-
+      
       - name: Save Semgrep JSON artifact
         if: steps.check_files.outputs.found == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: semgrep-json
           path: semgrep-results.json
+
+
 
   gitleaks:
     name: Gitleaks Scan
@@ -142,7 +153,7 @@ jobs:
           fetch-depth: 0
 
       - name: Run Nexus Lifecycle Scan
-        shell: pwsh
+        shell: powershell
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
