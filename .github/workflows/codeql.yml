@@ -191,12 +191,13 @@ jobs:
         run: |
           cd AuthServer
           java -jar ..\tools\cli.jar -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t %SCAN_TYPE% AuthServer.csproj -o ..\iq-results-%SCAN_TYPE%.json
-
+      
       - name: Upload Nexus IQ JSON
         uses: actions/upload-artifact@v4
         with:
-          name: iq-json-%{{ matrix.scan-type }}
-          path: iq-results-%{{ matrix.scan-type }}.json
+          name: iq-json-${{ matrix.scan-type }}
+          path: iq-results-${{ matrix.scan-type }}.json
+
 
   # -------------------
   # 3️⃣ Optional Deploy
