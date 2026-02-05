@@ -68,55 +68,66 @@ jobs:
         run: |
           cp codeql-results.sarif codeql-results.json || true
 
-  semgrep:
-    name: Semgrep Scan
-    runs-on: ubuntu-latest
-    needs: build-test
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # ensures full git history for PR diff
-  
-      - name: Check if repo has files
-        id: check_files
-        run: |
-          if git ls-files | grep -q .; then
-            echo "found=true" >> $GITHUB_OUTPUT
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-          fi
-  
-      - name: Run Semgrep
-        if: steps.check_files.outputs.found == 'true'
-        run: |
-          # Generate JSON
-          docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
-            semgrep --config auto --json --output /src/semgrep-results.json || true
-      
-          # Convert JSON → SARIF
+semgrep:
+  name: Semgrep Scan
+  runs-on: ubuntu-latest
+  needs: build-test
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Check for repo files
+      id: check_files
+      run: |
+        if git ls-files | grep -q .; then
+          echo "found=true" >> $GITHUB_OUTPUT
+        else
+          echo "found=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Run Semgrep JSON
+      if: steps.check_files.outputs.found == 'true'
+      run: |
+        docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
+          semgrep --config auto --json --output /src/semgrep-results.json || true
+
+        # Fail only on critical issues
+        if grep -q '"severity": "error"' /src/semgrep-results.json; then
+          echo "Critical Semgrep findings detected!"
+          exit 1
+        fi
+
+    - name: Convert Semgrep JSON → SARIF
+      if: steps.check_files.outputs.found == 'true'
+      run: |
+        if [ -f semgrep-results.json ]; then
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
             semgrep-sarif /src/semgrep-results.json /src/semgrep-results.sarif || true
-      
-          # Fail only if critical findings exist
-          if grep -q '"severity": "error"' /src/semgrep-results.json; then
-            echo "Critical Semgrep findings detected!"
-            exit 1
-          fi
-      
-      - name: Upload Semgrep SARIF
-        if: steps.check_files.outputs.found == 'true'
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: semgrep-results.sarif
-          category: semgrep
-      
-      - name: Save Semgrep JSON artifact
-        if: steps.check_files.outputs.found == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: semgrep-json
-          path: semgrep-results.json
+        else
+          echo "No JSON found, skipping SARIF conversion"
+        fi
 
+    - name: Upload Semgrep SARIF
+      if: steps.check_files.outputs.found == 'true'
+      run: |
+        if [ -f semgrep-results.sarif ]; then
+          echo "Uploading SARIF..."
+          gh api -X POST /repos/${{ github.repository }}/code-scanning/sarifs \
+            -F sarif=@semgrep-results.sarif \
+            -F category=semgrep \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}"
+        else
+          echo "No SARIF file, skipping upload"
+        fi
+
+    - name: Upload Semgrep JSON artifact
+      if: steps.check_files.outputs.found == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: semgrep-json
+        path: semgrep-results.json
 
 
   gitleaks:
@@ -145,28 +156,35 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+  
       - name: Run Nexus Lifecycle Scan
-        shell: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command
+        shell: powershell
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
+          # Bypass script signing for this process
           Set-ExecutionPolicy Bypass -Scope Process -Force
-        
+  
+          # Run IQ CLI scan
           iqcli -s http://192.168.70.35:8070 `
                 -a $env:IQ_USER:$env:IQ_PASS `
                 -i my-app `
                 -t build `
                 -o json > iq-results.json
-        
+  
+          # Fail workflow only on critical violations
           if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
             Write-Host "Critical Nexus Lifecycle policy violations detected!"
             exit 1
           }
-
+  
       - name: Upload Nexus Lifecycle JSON
         uses: actions/upload-artifact@v4
         with:
           name: iq-json
           path: iq-results.json
+
 
   # -------------------
   # 3️⃣ Optional Deploy
