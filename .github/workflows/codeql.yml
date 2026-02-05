@@ -25,7 +25,7 @@ jobs:
       - name: Setup .NET SDK
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x'  # adjust as needed
+          dotnet-version: '8.0.x'
 
       - name: Restore dependencies
         run: dotnet restore
@@ -66,7 +66,7 @@ jobs:
           category: "/language:${{matrix.language}}"
       - name: Save CodeQL JSON
         run: |
-          cp codeql-results.sarif codeql-results.json || true  # optional, duplicate SARIF as JSON for consistency
+          cp codeql-results.sarif codeql-results.json || true
 
   semgrep:
     name: Semgrep Scan
@@ -75,8 +75,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # ensures full git history for PR diff
-  
+          fetch-depth: 0
+
       - name: Check if repo has files
         id: check_files
         run: |
@@ -85,30 +85,28 @@ jobs:
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
-  
+
       - name: Run Semgrep
         if: steps.check_files.outputs.found == 'true'
         run: |
-          # Run Semgrep with both SARIF and JSON outputs
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
             semgrep --config auto \
                     --sarif --json \
                     --output /src/semgrep-results.sarif \
                     --json-output /src/semgrep-results.json || true
-  
-          # Fail workflow only if critical findings exist
+
           if grep -q '"severity": "error"' /src/semgrep-results.json; then
             echo "Critical Semgrep findings detected!"
             exit 1
           fi
-  
+
       - name: Upload Semgrep SARIF
         if: steps.check_files.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
-  
+
       - name: Save Semgrep JSON artifact
         if: steps.check_files.outputs.found == 'true'
         uses: actions/upload-artifact@v4
@@ -123,54 +121,50 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # important for scanning PR diffs
+          fetch-depth: 0
 
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          scan: "pr"      # ensures PR diff is scanned
+          scan: "pr"
           verbose: true
           args: --report-format=json --report-path=gitleaks-results.json
 
-      nexus-lifecycle:
-      name: Nexus Lifecycle Scan
-      runs-on: self-hosted
-      needs: build-test
-      steps:
-        - uses: actions/checkout@v4
-          with:
-            fetch-depth: 0  # full history for PR scanning
-    
-        - name: Run Nexus Lifecycle Scan
-          shell: pwsh
-          env:
-            IQ_USER: ${{ secrets.IQ_USER }}
-            IQ_PASS: ${{ secrets.IQ_PASS }}
-          run: |
-            # Temporarily bypass script signing policy
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-    
-            # Run IQ CLI against private server
-            iqcli -s http://192.168.70.35:8070 `
-                  -a $env:IQ_USER:$env:IQ_PASS `
-                  -i my-app `
-                  -t build `
-                  -o json > iq-results.json
-    
-            # Fail only if critical violations exist
-            if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
-              Write-Host "Critical Nexus Lifecycle policy violations detected!"
-              exit 1
-            }
-    
-        - name: Upload Nexus Lifecycle JSON
-          uses: actions/upload-artifact@v4
-          with:
-            name: iq-json
-            path: iq-results.json
+  nexus-lifecycle:
+    name: Nexus Lifecycle Scan
+    runs-on: self-hosted
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      - name: Run Nexus Lifecycle Scan
+        shell: pwsh
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
+        run: |
+          Set-ExecutionPolicy Bypass -Scope Process -Force
+
+          iqcli -s http://192.168.70.35:8070 `
+                -a $env:IQ_USER:$env:IQ_PASS `
+                -i my-app `
+                -t build `
+                -o json > iq-results.json
+
+          if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
+            Write-Host "Critical Nexus Lifecycle policy violations detected!"
+            exit 1
+          }
+
+      - name: Upload Nexus Lifecycle JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: iq-json
+          path: iq-results.json
 
   # -------------------
   # 3️⃣ Optional Deploy
@@ -196,7 +190,7 @@ jobs:
     needs: [codeql, semgrep, gitleaks, nexus-lifecycle]
     steps:
       - name: Upload JSON Reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-scans
           path: |
