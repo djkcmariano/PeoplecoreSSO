@@ -157,15 +157,11 @@ jobs:
         scan-type: [release, source, stage, build]
   
     steps:
-      # -----------------------------
-      # Checkout repo
-      # -----------------------------
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
   
-      # -----------------------------
-      # Ensure nuget.exe is present
-      # -----------------------------
       - name: Ensure NuGet CLI
         shell: cmd
         run: |
@@ -173,40 +169,30 @@ jobs:
             curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
           )
   
-      # -----------------------------
-      # Restore NuGet packages
-      # -----------------------------
       - name: Restore NuGet Packages
         shell: cmd
         run: nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
   
-      # -----------------------------
-      # Build the project
-      # -----------------------------
       - name: Build Project
         shell: cmd
         run: dotnet build AuthServer.csproj --configuration Release --no-restore
   
-      # -----------------------------
-      # Run Nexus IQ CLI
-      # -----------------------------
       - name: Run Nexus IQ Scan
         shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
+          SCAN_TYPE: ${{ matrix.scan-type }}
         run: |
           cd AuthServer
-          java -jar ..\tools\cli.jar -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t %{{ matrix.scan-type }} AuthServer.csproj -o ..\iq-results-%{{ matrix.scan-type }}.json
+          java -jar ..\tools\cli.jar -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t %SCAN_TYPE% AuthServer.csproj -o ..\iq-results-%SCAN_TYPE%.json
   
-      # -----------------------------
-      # Upload JSON artifact
-      # -----------------------------
       - name: Upload Nexus IQ JSON
         uses: actions/upload-artifact@v4
         with:
           name: iq-json-%{{ matrix.scan-type }}
           path: iq-results-%{{ matrix.scan-type }}.json
+
   # -------------------
   # 3️⃣ Optional Deploy
   # -------------------
