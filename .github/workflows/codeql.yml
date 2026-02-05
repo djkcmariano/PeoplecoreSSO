@@ -64,6 +64,9 @@ jobs:
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{matrix.language}}"
+      - name: Save CodeQL JSON
+        run: |
+          cp codeql-results.sarif codeql-results.json || true  # optional, duplicate SARIF as JSON for consistency
 
   semgrep:
     name: Semgrep Scan
@@ -73,7 +76,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # ensures full git history for PR diff
-  
+
       - name: Check if repo has files
         id: check_files
         run: |
@@ -82,27 +85,26 @@ jobs:
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
-  
+
       - name: Run Semgrep
         if: steps.check_files.outputs.found == 'true'
         run: |
           # Run Semgrep on all files
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
-            semgrep --config auto --sarif --output /src/semgrep-results.sarif || true
-  
+            semgrep --config auto --sarif --json --output /src/semgrep-results.json || true
+
           # Fail workflow only if critical findings exist
-          if grep -q '"severity": "error"' /src/semgrep-results.sarif; then
+          if grep -q '"severity": "error"' /src/semgrep-results.json; then
             echo "Critical Semgrep findings detected!"
             exit 1
           fi
-  
+
       - name: Upload Semgrep SARIF
         if: steps.check_files.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: semgrep-results.sarif
+          sarif_file: semgrep-results.json
           category: semgrep
-
 
   gitleaks:
     name: Gitleaks Scan
@@ -112,7 +114,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # important for scanning PR diffs
-  
+
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -120,6 +122,32 @@ jobs:
         with:
           scan: "pr"      # ensures PR diff is scanned
           verbose: true
+          args: --report-format=json --report-path=gitleaks-results.json
+
+  nexus-lifecycle:
+    name: Nexus Lifecycle Scan
+    runs-on: ubuntu-latest
+    needs: build-test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # required for PR scanning
+
+      - name: Run Nexus Lifecycle Scan
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
+        run: |
+          iqcli -s https://iq.yourcompany.com \
+                -a ${{ env.IQ_USER }}:${{ env.IQ_PASS }} \
+                -i my-app \
+                -t build \
+                -o json > iq-results.json
+
+          if grep -q "Critical Policy Violation" iq-results.json; then
+            echo "Critical Nexus Lifecycle policy violations detected!"
+            exit 1
+          fi
 
   # -------------------
   # 3️⃣ Optional Deploy
@@ -127,7 +155,7 @@ jobs:
   optional-deploy:
     name: Optional Deploy
     runs-on: ubuntu-latest
-    needs: [build-test, codeql, semgrep, gitleaks]
+    needs: [build-test, codeql, semgrep, gitleaks, nexus-lifecycle]
     if: github.event.pull_request.merged == true
     steps:
       - uses: actions/checkout@v4
@@ -135,3 +163,21 @@ jobs:
         run: |
           echo "Deploying application..."
           # Add your deployment steps here
+
+  # -------------------
+  # 4️⃣ Upload all JSON artifacts
+  # -------------------
+  upload-json-artifacts:
+    name: Upload Security Scan Artifacts
+    runs-on: ubuntu-latest
+    needs: [codeql, semgrep, gitleaks, nexus-lifecycle]
+    steps:
+      - name: Upload JSON Reports
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-scans
+          path: |
+            codeql-results.json
+            semgrep-results.json
+            gitleaks-results.json
+            iq-results.json
