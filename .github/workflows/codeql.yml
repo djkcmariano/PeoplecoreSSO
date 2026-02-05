@@ -193,8 +193,8 @@ jobs:
       - name: Run Nexus IQ Scan
         shell: cmd
         env:
-          IQ_USER: %IQ_USER%
-          IQ_PASS: %IQ_PASS%
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
           cd AuthServer
           java -jar ..\tools\cli.jar -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t %{{ matrix.scan-type }} AuthServer.csproj -o ..\iq-results-%{{ matrix.scan-type }}.json
@@ -207,7 +207,6 @@ jobs:
         with:
           name: iq-json-%{{ matrix.scan-type }}
           path: iq-results-%{{ matrix.scan-type }}.json
-
   # -------------------
   # 3️⃣ Optional Deploy
   # -------------------
