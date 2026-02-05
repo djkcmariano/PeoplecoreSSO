@@ -104,14 +104,14 @@ jobs:
   
       - name: Upload Semgrep SARIF
         if: steps.check_files.outputs.found == 'true'
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
   
       - name: Save Semgrep JSON artifact
         if: steps.check_files.outputs.found == 'true'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: semgrep-json
           path: semgrep-results.json
@@ -134,30 +134,43 @@ jobs:
           verbose: true
           args: --report-format=json --report-path=gitleaks-results.json
 
-  nexus-lifecycle:
-    name: Nexus Lifecycle Scan
-    runs-on: self-hosted
-    needs: build-test
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # required for PR scanning
+      nexus-lifecycle:
+      name: Nexus Lifecycle Scan
+      runs-on: self-hosted
+      needs: build-test
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0  # full history for PR scanning
+    
+        - name: Run Nexus Lifecycle Scan
+          shell: pwsh
+          env:
+            IQ_USER: ${{ secrets.IQ_USER }}
+            IQ_PASS: ${{ secrets.IQ_PASS }}
+          run: |
+            # Temporarily bypass script signing policy
+            Set-ExecutionPolicy Bypass -Scope Process -Force
+    
+            # Run IQ CLI against private server
+            iqcli -s http://192.168.70.35:8070 `
+                  -a $env:IQ_USER:$env:IQ_PASS `
+                  -i my-app `
+                  -t build `
+                  -o json > iq-results.json
+    
+            # Fail only if critical violations exist
+            if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
+              Write-Host "Critical Nexus Lifecycle policy violations detected!"
+              exit 1
+            }
+    
+        - name: Upload Nexus Lifecycle JSON
+          uses: actions/upload-artifact@v4
+          with:
+            name: iq-json
+            path: iq-results.json
 
-      - name: Run Nexus Lifecycle Scan
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-        run: |
-          iqcli -s http://192.168.70.35:8070 \
-                -a ${{ env.IQ_USER }}:${{ env.IQ_PASS }} \
-                -i my-app \
-                -t build \
-                -o json > iq-results.json
-
-          if grep -q "Critical Policy Violation" iq-results.json; then
-            echo "Critical Nexus Lifecycle policy violations detected!"
-            exit 1
-          fi
 
   # -------------------
   # 3️⃣ Optional Deploy
