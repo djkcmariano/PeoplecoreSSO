@@ -159,47 +159,54 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
   
-      # Ensure nuget.exe exists
-      - name: Download NuGet CLI
-        shell: powershell
+      # -----------------------------
+      # Ensure nuget.exe is present
+      # -----------------------------
+      - name: Download NuGet CLI if missing
         run: |
-          if (-not (Test-Path "nuget.exe")) {
-              Write-Host "Downloading nuget.exe..."
-              $client = New-Object System.Net.WebClient
-              $client.DownloadFile("https://dist.nuget.org/win-x86-commandline/latest/nuget.exe", "nuget.exe")
-          }
-          
+          if not exist nuget.exe (
+            curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+          )
   
-      # Restore packages
+      # -----------------------------
+      # Restore NuGet packages
+      # -----------------------------
       - name: Restore NuGet Packages
         run: |
           nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
   
-      # Build project
+      # -----------------------------
+      # Build the project
+      # -----------------------------
       - name: Build Project
         run: |
-          msbuild AuthServer.csproj /t:Build /p:Configuration=Release
+          dotnet build AuthServer.csproj --configuration Release
   
+      # -----------------------------
       # Run Nexus IQ Scan
+      # -----------------------------
       - name: Run Nexus IQ Scan
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
           java -jar tools/cli.jar `
-            -i "PeoplecoreAuthServer" `
+            -i "AuthServer" `
             -s http://192.168.70.35:8070 `
             -a $env:IQ_USER:$env:IQ_PASS `
             -t ${{ matrix.scan-type }} `
             AuthServer.csproj `
             -o json > iq-results-${{ matrix.scan-type }}.json
   
-      # Upload JSON
+      # -----------------------------
+      # Upload Scan JSON Artifact
+      # -----------------------------
       - name: Upload Nexus IQ JSON
         uses: actions/upload-artifact@v4
         with:
           name: iq-json-${{ matrix.scan-type }}
           path: iq-results-${{ matrix.scan-type }}.json
+
 
   # -------------------
   # 3️⃣ Optional Deploy
