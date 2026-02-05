@@ -97,12 +97,15 @@ jobs:
     needs: build-test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # important for scanning PR diffs
   
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          scan: "pr"          # mandatory for pull_request events
+          scan: "pr"      # ensures PR diff is scanned
           verbose: true
 
   # -------------------
