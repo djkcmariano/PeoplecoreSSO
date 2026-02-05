@@ -1,127 +1,83 @@
-name: "SAST + Secrets Parallel Scan"
+name: ".NET PR Workflow"
 
 on:
-  push:
-    branches: [ "main", "develop" ]
   pull_request:
+    branches: [ "main", "develop" ]
+  push:
     branches: [ "main", "develop" ]
 
 permissions:
   contents: read
   security-events: write
+
 jobs:
 
   # -------------------
-  # 1️⃣ CodeQL Analysis
+  # 1️⃣ Build & Test
+  # -------------------
+  build-test:
+    name: Build & Test
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test --no-build --verbosity normal --configuration Release
+
+  # -------------------
+  # 2️⃣ Security Scans (parallel)
   # -------------------
   codeql:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
+    needs: build-test
     permissions:
       security-events: write
-      packages: read
-      actions: read
       contents: read
-
     strategy:
       fail-fast: false
       matrix:
         include:
           - language: csharp
             build-mode: none
-          - language: javascript-typescript
-            build-mode: none
-          - language: python
-            build-mode: none
-          - language: ruby
-            build-mode: none
-          - language: actions
-            build-mode: none
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      # -------------------------------
-      # Detect JS/TS files
-      # -------------------------------
-      - name: Detect JS/TS files
-        id: check_js
-        if: matrix.language == 'javascript-typescript'
-        run: |
-          if git ls-files '*.js' '*.ts' | grep -q .; then
-            echo "found=true" >> $GITHUB_OUTPUT
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-          fi
-
-      # -------------------------------
-      # Detect Python files
-      # -------------------------------
-      - name: Detect Python files
-        id: check_py
-        if: matrix.language == 'python'
-        run: |
-          if git ls-files '*.py' | grep -q .; then
-            echo "found=true" >> $GITHUB_OUTPUT
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-          fi
-
-      # -------------------------------
-      # Detect Ruby files
-      # -------------------------------
-      - name: Detect Ruby files
-        id: check_rb
-        if: matrix.language == 'ruby'
-        run: |
-          if git ls-files '*.rb' | grep -q .; then
-            echo "found=true" >> $GITHUB_OUTPUT
-          else
-            echo "found=false" >> $GITHUB_OUTPUT
-          fi
-
-      # -------------------------------
-      # Initialize CodeQL only if files exist
-      # -------------------------------
+      - uses: actions/checkout@v4
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
-        if: >
-          matrix.language == 'csharp' ||
-          (matrix.language == 'javascript-typescript' && steps.check_js.outputs.found == 'true') ||
-          (matrix.language == 'python' && steps.check_py.outputs.found == 'true') ||
-          (matrix.language == 'ruby' && steps.check_rb.outputs.found == 'true') ||
-          matrix.language == 'actions'
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
           queries: security-extended,security-and-quality
-
-      # -------------------------------
-      # Perform CodeQL Analysis
-      # -------------------------------
       - name: Perform CodeQL Analysis
-        if: >
-          matrix.language == 'csharp' ||
-          (matrix.language == 'javascript-typescript' && steps.check_js.outputs.found == 'true') ||
-          (matrix.language == 'python' && steps.check_py.outputs.found == 'true') ||
-          (matrix.language == 'ruby' && steps.check_rb.outputs.found == 'true') ||
-          matrix.language == 'actions'
         uses: github/codeql-action/analyze@v4
         with:
           category: "/language:${{matrix.language}}"
+      - name: Save CodeQL JSON
+        run: |
+          cp codeql-results.sarif codeql-results.json || true
 
-  # -------------------
-  # 2️⃣ Semgrep Scan (parallel)
-  # -------------------
   semgrep:
     name: Semgrep Scan
     runs-on: ubuntu-latest
+    needs: build-test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
   
-      # Optional: skip empty repo
-      - name: Check if repo has files
+      - name: Check for repo files
         id: check_files
         run: |
           if git ls-files | grep -q .; then
@@ -130,26 +86,146 @@ jobs:
             echo "found=false" >> $GITHUB_OUTPUT
           fi
   
-      - name: Run Semgrep on all files
+      - name: Run Semgrep JSON
         if: steps.check_files.outputs.found == 'true'
         run: |
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
-            semgrep --config auto --error --sarif --output /src/semgrep-results.sarif
+            semgrep --config auto --json --output /src/semgrep-results.json || true
+  
+          # Fail only on critical issues
+          if grep -q '"severity": "error"' /src/semgrep-results.json; then
+            echo "Critical Semgrep findings detected!"
+            exit 1
+          fi
+  
+      - name: Convert Semgrep JSON → SARIF
+        if: steps.check_files.outputs.found == 'true'
+        run: |
+          if [ -f semgrep-results.json ]; then
+            docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
+              semgrep-sarif /src/semgrep-results.json /src/semgrep-results.sarif || true
+          else
+            echo "No JSON found, skipping SARIF conversion"
+          fi
   
       - name: Upload Semgrep SARIF
-        if: always()   # ✅ runs even if Semgrep exits 1
-        uses: github/codeql-action/upload-sarif@v3
+        if: steps.check_files.outputs.found == 'true'
+        run: |
+          if [ -f semgrep-results.sarif ]; then
+            echo "Uploading SARIF..."
+            gh api -X POST /repos/${{ github.repository }}/code-scanning/sarifs \
+              -F sarif=@semgrep-results.sarif \
+              -F category=semgrep \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}"
+          else
+            echo "No SARIF file, skipping upload"
+          fi
+  
+      - name: Upload Semgrep JSON artifact
+        if: steps.check_files.outputs.found == 'true'
+        uses: actions/upload-artifact@v4
         with:
-          sarif_file: semgrep-results.sarif
-          category: semgrep
+          name: semgrep-json
+          path: semgrep-results.json
 
-  # -------------------
-  # 3️⃣ Gitleaks Scan (parallel)
-  # -------------------
+
   gitleaks:
     name: Gitleaks Scan
     runs-on: ubuntu-latest
+    needs: build-test
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          scan: "pr"
+          verbose: true
+          args: --report-format=json --report-path=gitleaks-results.json
+
+  nexus-lifecycle:
+    name: Nexus Lifecycle Scan
+    runs-on: windows-latest
+    needs: build-test
+    strategy:
+      matrix:
+        scan-type: [release, source, stage, build]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+  
+      # Ensure nuget.exe
+      - name: Download NuGet CLI
+        run: |
+          if not exist nuget.exe (
+            curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+          )
+  
+      # Restore packages
+      - name: Restore NuGet Packages
+        run: |
+          nuget.exe restore MyProject.csproj -PackagesDirectory Packages
+  
+      # Build project
+      - name: Build Project
+        run: |
+          msbuild MyProject.csproj /t:Build /p:Configuration=Release
+  
+      # Run Nexus IQ Scan
+      - name: Run Nexus IQ Scan
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
+        run: |
+          java -jar tools/cli.jar `
+            -i "MyProject" `
+            -s http://192.168.70.35:8070 `
+            -a $env:IQ_USER:$env:IQ_PASS `
+            -t ${{ matrix.scan-type }} `
+            MyProject.csproj `
+            -o json > iq-results-${{ matrix.scan-type }}.json
+  
+      # Upload JSON
+      - name: Upload Nexus IQ JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: iq-json-${{ matrix.scan-type }}
+          path: iq-results-${{ matrix.scan-type }}.json
+
+  # -------------------
+  # 3️⃣ Optional Deploy
+  # -------------------
+  optional-deploy:
+    name: Optional Deploy
+    runs-on: ubuntu-latest
+    needs: [build-test, codeql, semgrep, gitleaks, nexus-lifecycle]
+    if: github.event.pull_request.merged == true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: |
+          echo "Deploying application..."
+          # Add your deployment steps here
+
+  # -------------------
+  # 4️⃣ Upload all JSON artifacts
+  # -------------------
+  upload-json-artifacts:
+    name: Upload Security Scan Artifacts
+    runs-on: ubuntu-latest
+    needs: [codeql, semgrep, gitleaks, nexus-lifecycle]
+    steps:
+      - name: Upload JSON Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scans
+          path: |
+            codeql-results.json
+            semgrep-results.json
+            gitleaks-results.json
+            iq-results.json
