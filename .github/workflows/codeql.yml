@@ -171,13 +171,13 @@ jobs:
       # Run Nexus Lifecycle Scan
       # -----------------------------
       - name: Run Nexus Lifecycle Scan
-        shell: powershell
+        shell: pwsh -ExecutionPolicy Bypass -File
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
           $ErrorActionPreference = "Stop"
-  
+      
           & "$PWD\iqcli\iqcli.exe" `
             -s http://192.168.70.35:8070 `
             -a "$env:IQ_USER:$env:IQ_PASS" `
@@ -185,7 +185,7 @@ jobs:
             -t build `
             -o json `
             . | Tee-Object iq-results.json
-  
+      
           if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
             Write-Error "Critical Nexus Lifecycle policy violations detected!"
           }
