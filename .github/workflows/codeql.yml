@@ -163,10 +163,11 @@ jobs:
       # Ensure nuget.exe is present
       # -----------------------------
       - name: Download NuGet CLI if missing
+        shell: powershell
         run: |
-          if not exist nuget.exe (
-            curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
-          )
+          if (-not (Test-Path "nuget.exe")) {
+              Invoke-WebRequest -Uri "https://dist.nuget.org/win-x86-commandline/latest/nuget.exe" -OutFile "nuget.exe"
+          }
   
       # -----------------------------
       # Restore NuGet packages
