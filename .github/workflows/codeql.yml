@@ -155,53 +155,52 @@ jobs:
     name: Nexus Lifecycle Scan
     runs-on: self-hosted
     needs: build-test
-    strategy:
-      matrix:
-        scan-type: [release, source, stage-release, build]
-
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          submodules: false
-          lfs: false
-
+  
       - name: Ensure NuGet CLI
         shell: cmd
         run: |
           if not exist nuget.exe (
             curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
           )
-
+  
       - name: Restore NuGet Packages
         shell: cmd
         run: nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
-
+  
       - name: Build Project
         shell: cmd
         run: dotnet build AuthServer.csproj --configuration Release --no-restore
-
-      - name: Run Nexus IQ Scan
+  
+      - name: Run Nexus IQ Scans
         shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
-          SCAN_TYPE: ${{ matrix.scan-type }}
         run: |
-          java -jar "%GITHUB_WORKSPACE%\tools\cli.jar" ^
-            -i "PeoplecoreAuthServer" ^
-            -s http://192.168.70.35:8070 ^
-            -a %IQ_USER%:%IQ_PASS% ^
-            -t %SCAN_TYPE% ^
-            "%GITHUB_WORKSPACE%\AuthServer.csproj" ^
-            -o "%GITHUB_WORKSPACE%\iq-results-%SCAN_TYPE%.json"
-
-      - name: Upload Nexus IQ JSON
+          set CLI="%GITHUB_WORKSPACE%\tools\cli.jar"
+          set PROJ="%GITHUB_WORKSPACE%\AuthServer.csproj"
+          set OUT="%GITHUB_WORKSPACE%"
+  
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t source  %PROJ% -o %OUT%\iq-source.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t build   %PROJ% -o %OUT%\iq-build.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t stage   %PROJ% -o %OUT%\iq-stage.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t release %PROJ% -o %OUT%\iq-release.json
+  
+      - name: Upload Nexus IQ Reports
         uses: actions/upload-artifact@v4
         with:
-          name: iq-json-${{ matrix.scan-type }}
-          path: iq-results-${{ matrix.scan-type }}.json
+          name: nexus-iq-results
+          path: |
+            iq-source.json
+            iq-build.json
+            iq-stage.json
+            iq-release.json
 
 
   # -------------------
