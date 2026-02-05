@@ -89,26 +89,20 @@ jobs:
       - name: Run Semgrep
         if: steps.check_files.outputs.found == 'true'
         run: |
-          # -----------------------------
-          # 1️⃣ Run Semgrep and generate JSON
-          # -----------------------------
+          # Generate JSON
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
             semgrep --config auto --json --output /src/semgrep-results.json || true
-  
-          # -----------------------------
-          # 2️⃣ Convert JSON → SARIF for GitHub Security
-          # -----------------------------
+      
+          # Convert JSON → SARIF
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
             semgrep-sarif /src/semgrep-results.json /src/semgrep-results.sarif || true
-  
-          # -----------------------------
-          # 3️⃣ Fail workflow only if critical findings exist
-          # -----------------------------
+      
+          # Fail only if critical findings exist
           if grep -q '"severity": "error"' /src/semgrep-results.json; then
             echo "Critical Semgrep findings detected!"
             exit 1
           fi
-  
+      
       - name: Upload Semgrep SARIF
         if: steps.check_files.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v4
@@ -153,19 +147,16 @@ jobs:
           fetch-depth: 0
 
       - name: Run Nexus Lifecycle Scan
-        shell: powershell
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
+        shell: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -command
         run: |
           Set-ExecutionPolicy Bypass -Scope Process -Force
-
+        
           iqcli -s http://192.168.70.35:8070 `
                 -a $env:IQ_USER:$env:IQ_PASS `
                 -i my-app `
                 -t build `
                 -o json > iq-results.json
-
+        
           if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
             Write-Host "Critical Nexus Lifecycle policy violations detected!"
             exit 1
