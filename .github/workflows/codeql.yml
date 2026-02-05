@@ -157,7 +157,7 @@ jobs:
     needs: build-test
     strategy:
       matrix:
-        scan-type: [release, source, stage, build]
+        scan-type: [release, source, stage-release, build]
 
     steps:
       - name: Checkout repository
