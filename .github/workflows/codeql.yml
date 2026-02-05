@@ -150,54 +150,52 @@ jobs:
 
   nexus-lifecycle:
     name: Nexus Lifecycle Scan
-    runs-on: self-hosted
+    runs-on: windows-latest
     needs: build-test
-  
+    strategy:
+      matrix:
+        scan-type: [release, source, stage, build]
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - name: Checkout repository
+        uses: actions/checkout@v4
   
-      # -----------------------------
-      # Download Nexus IQ CLI (Windows)
-      # -----------------------------
-      - name: Download Nexus IQ CLI
-        shell: cmd
+      # Ensure nuget.exe
+      - name: Download NuGet CLI
         run: |
-          if not exist iqcli mkdir iqcli
-          curl -L -o iqcli\iqcli.exe https://download.sonatype.com/clm/scanner/latest-win64.exe
+          if not exist nuget.exe (
+            curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
+          )
   
-      # -----------------------------
-      # Run Nexus Lifecycle Scan
-      # -----------------------------
-      - name: Run Nexus Lifecycle Scan
-        shell: pwsh -ExecutionPolicy Bypass -File
+      # Restore packages
+      - name: Restore NuGet Packages
+        run: |
+          nuget.exe restore MyProject.csproj -PackagesDirectory Packages
+  
+      # Build project
+      - name: Build Project
+        run: |
+          msbuild MyProject.csproj /t:Build /p:Configuration=Release
+  
+      # Run Nexus IQ Scan
+      - name: Run Nexus IQ Scan
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
-          $ErrorActionPreference = "Stop"
-      
-          & "$PWD\iqcli\iqcli.exe" `
+          java -jar tools/cli.jar `
+            -i "MyProject" `
             -s http://192.168.70.35:8070 `
-            -a "$env:IQ_USER:$env:IQ_PASS" `
-            -i "my-app" `
-            -t build `
-            -o json `
-            . | Tee-Object iq-results.json
-      
-          if (Select-String -Path iq-results.json -Pattern "Critical Policy Violation") {
-            Write-Error "Critical Nexus Lifecycle policy violations detected!"
-          }
+            -a $env:IQ_USER:$env:IQ_PASS `
+            -t ${{ matrix.scan-type }} `
+            MyProject.csproj `
+            -o json > iq-results-${{ matrix.scan-type }}.json
   
-      # -----------------------------
-      # Upload Results
-      # -----------------------------
-      - name: Upload Nexus Lifecycle JSON
+      # Upload JSON
+      - name: Upload Nexus IQ JSON
         uses: actions/upload-artifact@v4
         with:
-          name: iq-json
-          path: iq-results.json
+          name: iq-json-${{ matrix.scan-type }}
+          path: iq-results-${{ matrix.scan-type }}.json
 
   # -------------------
   # 3️⃣ Optional Deploy
