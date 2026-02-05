@@ -159,7 +159,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
   
-      # Ensure nuget.exe
+      # Ensure nuget.exe exists
       - name: Download NuGet CLI
         run: |
           if not exist nuget.exe (
