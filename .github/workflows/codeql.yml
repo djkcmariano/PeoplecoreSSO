@@ -138,7 +138,7 @@ jobs:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
-          iqcli -s https://iq.yourcompany.com \
+          iqcli -s http://192.168.70.35:8070 \
                 -a ${{ env.IQ_USER }}:${{ env.IQ_PASS }} \
                 -i my-app \
                 -t build \
