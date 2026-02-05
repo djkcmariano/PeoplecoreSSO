@@ -189,9 +189,14 @@ jobs:
           IQ_PASS: ${{ secrets.IQ_PASS }}
           SCAN_TYPE: ${{ matrix.scan-type }}
         run: |
-          cd AuthServer
-          java -jar "%GITHUB_WORKSPACE%\tools\cli.jar" -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t %SCAN_TYPE% "%GITHUB_WORKSPACE%\AuthServer\AuthServer.csproj" -o "%GITHUB_WORKSPACE%\iq-results-%SCAN_TYPE%.json"
-      
+          java -jar "%GITHUB_WORKSPACE%\tools\cli.jar" ^
+            -i "PeoplecoreAuthServer" ^
+            -s http://192.168.70.35:8070 ^
+            -a %IQ_USER%:%IQ_PASS% ^
+            -t %SCAN_TYPE% ^
+            "%GITHUB_WORKSPACE%\AuthServer.csproj" ^
+            -o "%GITHUB_WORKSPACE%\iq-results-%SCAN_TYPE%.json"
+
       - name: Upload Nexus IQ JSON
         uses: actions/upload-artifact@v4
         with:
