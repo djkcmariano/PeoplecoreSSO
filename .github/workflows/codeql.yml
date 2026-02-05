@@ -76,7 +76,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0  # ensures full git history for PR diff
-
+  
       - name: Check if repo has files
         id: check_files
         run: |
@@ -85,26 +85,36 @@ jobs:
           else
             echo "found=false" >> $GITHUB_OUTPUT
           fi
-
+  
       - name: Run Semgrep
         if: steps.check_files.outputs.found == 'true'
         run: |
-          # Run Semgrep on all files
+          # Run Semgrep with both SARIF and JSON outputs
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
-            semgrep --config auto --sarif --json --output /src/semgrep-results.json || true
-
+            semgrep --config auto \
+                    --sarif --json \
+                    --output /src/semgrep-results.sarif \
+                    --json-output /src/semgrep-results.json || true
+  
           # Fail workflow only if critical findings exist
           if grep -q '"severity": "error"' /src/semgrep-results.json; then
             echo "Critical Semgrep findings detected!"
             exit 1
           fi
-
+  
       - name: Upload Semgrep SARIF
         if: steps.check_files.outputs.found == 'true'
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: semgrep-results.json
+          sarif_file: semgrep-results.sarif
           category: semgrep
+  
+      - name: Save Semgrep JSON artifact
+        if: steps.check_files.outputs.found == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: semgrep-json
+          path: semgrep-results.json
 
   gitleaks:
     name: Gitleaks Scan
@@ -126,7 +136,7 @@ jobs:
 
   nexus-lifecycle:
     name: Nexus Lifecycle Scan
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     needs: build-test
     steps:
       - uses: actions/checkout@v4
