@@ -148,54 +148,60 @@ jobs:
           verbose: true
           args: --report-format=json --report-path=gitleaks-results.json
 
+  # -------------------
+  # 2️⃣ Nexus Lifecycle Scan
+  # -------------------
   nexus-lifecycle:
     name: Nexus Lifecycle Scan
-    runs-on: windows-latest
+    runs-on: self-hosted
     needs: build-test
-    strategy:
-      matrix:
-        scan-type: [release, source, stage, build]
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
   
-      # Ensure nuget.exe
-      - name: Download NuGet CLI
+      - name: Ensure NuGet CLI
+        shell: cmd
         run: |
           if not exist nuget.exe (
             curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
           )
   
-      # Restore packages
       - name: Restore NuGet Packages
-        run: |
-          nuget.exe restore MyProject.csproj -PackagesDirectory Packages
+        shell: cmd
+        run: nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
   
-      # Build project
       - name: Build Project
-        run: |
-          msbuild MyProject.csproj /t:Build /p:Configuration=Release
+        shell: cmd
+        run: dotnet build AuthServer.csproj --configuration Release --no-restore
   
-      # Run Nexus IQ Scan
-      - name: Run Nexus IQ Scan
+      - name: Run Nexus IQ Scans
+        shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
         run: |
-          java -jar tools/cli.jar `
-            -i "MyProject" `
-            -s http://192.168.70.35:8070 `
-            -a $env:IQ_USER:$env:IQ_PASS `
-            -t ${{ matrix.scan-type }} `
-            MyProject.csproj `
-            -o json > iq-results-${{ matrix.scan-type }}.json
+          set CLI="%GITHUB_WORKSPACE%\tools\cli.jar"
+          set PROJ="%GITHUB_WORKSPACE%\AuthServer.csproj"
+          set OUT="%GITHUB_WORKSPACE%"
   
-      # Upload JSON
-      - name: Upload Nexus IQ JSON
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t source  "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-source.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t build  " %GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-build.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t stage-release   "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-stage-release.json
+          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t release "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-release.json
+  
+      - name: Upload Nexus IQ Reports
         uses: actions/upload-artifact@v4
         with:
-          name: iq-json-${{ matrix.scan-type }}
-          path: iq-results-${{ matrix.scan-type }}.json
+          name: nexus-iq-results
+          path: |
+            iq-source.json
+            iq-build.json
+            iq-stage.json
+            iq-release.json
+
 
   # -------------------
   # 3️⃣ Optional Deploy
