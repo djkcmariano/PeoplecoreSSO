@@ -91,8 +91,6 @@ jobs:
         run: |
           docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
             semgrep --config auto --json --output /src/semgrep-results.json || true
-  
-          # Fail only on critical issues
           if grep -q '"severity": "error"' /src/semgrep-results.json; then
             echo "Critical Semgrep findings detected!"
             exit 1
@@ -104,8 +102,6 @@ jobs:
           if [ -f semgrep-results.json ]; then
             docker run --rm -v ${{ github.workspace }}:/src returntocorp/semgrep \
               semgrep-sarif /src/semgrep-results.json /src/semgrep-results.sarif || true
-          else
-            echo "No JSON found, skipping SARIF conversion"
           fi
   
       - name: Upload Semgrep SARIF
@@ -118,8 +114,6 @@ jobs:
               -F category=semgrep \
               -H "Accept: application/vnd.github+json" \
               -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}"
-          else
-            echo "No SARIF file, skipping upload"
           fi
   
       - name: Upload Semgrep JSON artifact
@@ -128,7 +122,6 @@ jobs:
         with:
           name: semgrep-json
           path: semgrep-results.json
-
 
   gitleaks:
     name: Gitleaks Scan
@@ -148,99 +141,186 @@ jobs:
           verbose: true
           args: --report-format=json --report-path=gitleaks-results.json
 
-  nexus-lifecycle:
-    name: Nexus Lifecycle Scan
+  # -------------------
+  # 3️⃣ Nexus Lifecycle – split jobs
+  # -------------------
+
+  nexus-source:
+    name: Nexus IQ – Source
     runs-on: self-hosted
     needs: build-test
-  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-  
-      - name: Ensure NuGet CLI
+      - name: Find CLI Jar
         shell: cmd
         run: |
-          if not exist nuget.exe (
-            curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
-          )
-  
-      - name: Restore NuGet Packages
-        shell: cmd
-        run: |
-          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
-            set PROJ=%%F
-            goto :found
-          )
-          :found
-          nuget.exe restore "%PROJ%" -PackagesDirectory Packages
-  
-      - name: Build Project
-        shell: cmd
-        run: |
-          dotnet build "%PROJ%" --configuration Release --no-restore
-  
-      - name: Find Nexus CLI Jar
-        shell: cmd
-        run: |
-          set "CLI_PATH="
+          set "CLI="
           for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
-            set "CLI_PATH=%%F"
+            set "CLI=%%F"
             goto :found_cli
           )
           echo CLI Jar not found!
           exit /b 1
           :found_cli
-          echo Found CLI Jar at "%CLI_PATH%"
-          setx CLI_PATH "%CLI_PATH%"
-  
-      - name: Set App Name
+          echo Found CLI: %CLI%
+          setx CLI "%CLI%"
+      - name: Find csproj
         shell: cmd
         run: |
-          for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
-          setx APP_NAME "%APP_NAME%"
-          echo App Name: %APP_NAME%
-  
-      - name: Run Nexus IQ Scans
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set PROJ=%%F
+            goto :proj_found
+          )
+          :proj_found
+          setx PROJ "%PROJ%"
+          echo Found Project: %PROJ%
+      - name: Run Nexus Source Scan
         shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
           IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
         run: |
-          REM Dynamically load CLI_PATH and APP_NAME for this step
-          set CLI=%CLI_PATH%
-          set APP=%APP_NAME%
-  
-          REM Run all four scan stages
-          for %%S in (source build stage-release release) do (
-            for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
-              set PROJ=%%F
-              goto :proj_found
-            )
-            :proj_found
-            java -jar "%CLI%" -i "%APP%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t %%S "%PROJ%" -o json > iq-%%S.json
-          )
-  
-      - name: Upload Nexus IQ Reports
+          java -jar "%CLI%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ%" -o json > iq-source.json
+      - name: Upload Source Report
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-iq-results
-          path: |
-            iq-source.json
-            iq-build.json
-            iq-stage-release.json
-            iq-release.json
+          name: iq-source.json
+          path: iq-source.json
 
+  nexus-build:
+    name: Nexus IQ – Build
+    runs-on: self-hosted
+    needs: build-test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Find CLI Jar
+        shell: cmd
+        run: |
+          set "CLI="
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+            set "CLI=%%F"
+            goto :found_cli
+          )
+          echo Found CLI: %CLI%
+          setx CLI "%CLI%"
+      - name: Find csproj
+        shell: cmd
+        run: |
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set PROJ=%%F
+            goto :proj_found
+          )
+          :proj_found
+          setx PROJ "%PROJ%"
+          echo Found Project: %PROJ%
+      - name: Run Nexus Build Scan
+        shell: cmd
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
+          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
+        run: |
+          java -jar "%CLI%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ%" -o json > iq-build.json
+      - name: Upload Build Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: iq-build.json
+          path: iq-build.json
+
+  nexus-stage-release:
+    name: Nexus IQ – Stage Release
+    runs-on: self-hosted
+    needs: build-test
+    if: github.event_name == 'pull_request' && github.base_ref == 'develop' || github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Find CLI Jar
+        shell: cmd
+        run: |
+          set "CLI="
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+            set "CLI=%%F"
+            goto :found_cli
+          )
+          echo Found CLI: %CLI%
+          setx CLI "%CLI%"
+      - name: Find csproj
+        shell: cmd
+        run: |
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set PROJ=%%F
+            goto :proj_found
+          )
+          :proj_found
+          setx PROJ "%PROJ%"
+          echo Found Project: %PROJ%
+      - name: Run Nexus Stage-Release Scan
+        shell: cmd
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
+          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
+        run: |
+          java -jar "%CLI%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ%" -o json > iq-stage-release.json
+      - name: Upload Stage-Release Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: iq-stage-release.json
+          path: iq-stage-release.json
+
+  nexus-release:
+    name: Nexus IQ – Release
+    runs-on: self-hosted
+    needs: build-test
+    if: github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Find CLI Jar
+        shell: cmd
+        run: |
+          set "CLI="
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+            set "CLI=%%F"
+            goto :found_cli
+          )
+          echo Found CLI: %CLI%
+          setx CLI "%CLI%"
+      - name: Find csproj
+        shell: cmd
+        run: |
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set PROJ=%%F
+            goto :proj_found
+          )
+          :proj_found
+          setx PROJ "%PROJ%"
+          echo Found Project: %PROJ%
+      - name: Run Nexus Release Scan
+        shell: cmd
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
+          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
+        run: |
+          java -jar "%CLI%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ%" -o json > iq-release.json
+      - name: Upload Release Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: iq-release.json
+          path: iq-release.json
 
   # -------------------
-  # 3️⃣ Optional Deploy
+  # 4️⃣ Optional Deploy
   # -------------------
   optional-deploy:
     name: Optional Deploy
     runs-on: ubuntu-latest
-    needs: [build-test, codeql, semgrep, gitleaks, nexus-lifecycle]
+    needs: [build-test, codeql, semgrep, gitleaks, nexus-release]
     if: github.event.pull_request.merged == true
     steps:
       - uses: actions/checkout@v4
@@ -250,12 +330,12 @@ jobs:
           # Add your deployment steps here
 
   # -------------------
-  # 4️⃣ Upload all JSON artifacts
+  # 5️⃣ Upload all JSON artifacts
   # -------------------
   upload-json-artifacts:
     name: Upload Security Scan Artifacts
     runs-on: ubuntu-latest
-    needs: [codeql, semgrep, gitleaks, nexus-lifecycle]
+    needs: [codeql, semgrep, gitleaks, nexus-source, nexus-build, nexus-stage-release, nexus-release]
     steps:
       - name: Upload JSON Reports
         uses: actions/upload-artifact@v4
@@ -265,4 +345,7 @@ jobs:
             codeql-results.json
             semgrep-results.json
             gitleaks-results.json
-            iq-results.json
+            iq-source.json
+            iq-build.json
+            iq-stage-release.json
+            iq-release.json
