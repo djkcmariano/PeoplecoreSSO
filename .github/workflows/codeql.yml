@@ -186,7 +186,10 @@ jobs:
       - name: Run Nexus Source Scan
         shell: cmd
         run: |
-          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ_PATH%" -o json
+          for /f "tokens=2 delims=/" %%a in ("%GITHUB_REPOSITORY%") do set "REPO_NAME=%%a"
+          echo Repo name: %REPO_NAME%
+          java -jar "%CLI_PATH%" -i "%REPO_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ_PATH%" -o json
+
   
       - name: Upload Source Scan
         uses: actions/upload-artifact@v4
