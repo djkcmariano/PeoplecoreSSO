@@ -189,6 +189,7 @@ jobs:
           IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
         run: |
           set CLI=%GITHUB_WORKSPACE%\tools\cli.jar
+          dir "%GITHUB_WORKSPACE%\tools"
           for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
           for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
             set PROJ=%%F
