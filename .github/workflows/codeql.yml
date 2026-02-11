@@ -150,130 +150,181 @@ jobs:
     name: Nexus IQ – Source
     runs-on: self-hosted
     needs: build-test
+    env:
+      IQ_USER: ${{ secrets.IQ_USER }}
+      IQ_PASS: ${{ secrets.IQ_PASS }}
+      IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
   
       - name: Find CLI Jar
-        id: find_cli
         shell: cmd
         run: |
-          set "FOUND_CLI="
           for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
-            set "FOUND_CLI=%%F"
-            goto found_cli
+            set "CLI=%%F"
+            goto :found_cli
           )
           echo CLI jar not found!
           exit /b 1
-  
           :found_cli
-          echo Found CLI: %FOUND_CLI%
-          echo CLI_PATH=%FOUND_CLI%>>%GITHUB_ENV%
+          echo CLI_PATH=%CLI%>>%GITHUB_ENV%
   
       - name: Find Project
-        id: find_proj
         shell: cmd
         run: |
           for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
             set "PROJ=%%F"
-            goto :proj_found
+            goto :found_proj
           )
           echo Project not found!
           exit /b 1
-          :proj_found
-          echo Project: %PROJ%
+          :found_proj
           echo PROJ_PATH=%PROJ%>>%GITHUB_ENV%
   
-      - name: Run Nexus IQ Source Scan
+      - name: Run Nexus Source Scan
         shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
         run: |
-          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ_PATH%" -o json > iq-source.json
-  
-      - name: Upload Source Scan JSON
+          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ_PATH%" -o json
+      - name: Upload Source Scan
         uses: actions/upload-artifact@v4
         with:
           name: iq-source.json
           path: iq-source.json
   
-  # 2️⃣ Nexus Build Scan
   nexus-build:
     name: Nexus IQ – Build
     runs-on: self-hosted
     needs: build-test
+    env:
+      IQ_USER: ${{ secrets.IQ_USER }}
+      IQ_PASS: ${{ secrets.IQ_PASS }}
+      IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
   
-      - name: Run Nexus IQ Build Scan
+      - name: Find CLI Jar
         shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
-          CLI_PATH: ${{ steps.find_cli.outputs.CLI_PATH }}
-          PROJ_PATH: ${{ steps.find_proj.outputs.PROJ_PATH }}
         run: |
-          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ_PATH%" -o json > iq-build.json
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+            set "CLI=%%F"
+            goto :found_cli
+          )
+          echo CLI jar not found!
+          exit /b 1
+          :found_cli
+          echo CLI_PATH=%CLI%>>%GITHUB_ENV%
   
-      - name: Upload Build Scan JSON
+      - name: Find Project
+        shell: cmd
+        run: |
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set "PROJ=%%F"
+            goto :found_proj
+          )
+          echo Project not found!
+          exit /b 1
+          :found_proj
+          echo PROJ_PATH=%PROJ%>>%GITHUB_ENV%
+  
+      - name: Run Nexus Build Scan
+        shell: cmd
+        run: |
+          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ_PATH%" -o json
+      - name: Upload Build Scan
         uses: actions/upload-artifact@v4
         with:
           name: iq-build.json
           path: iq-build.json
   
-  # 3️⃣ Nexus Stage-Release Scan
   nexus-stage-release:
     name: Nexus IQ – Stage Release
     runs-on: self-hosted
     needs: build-test
+    env:
+      IQ_USER: ${{ secrets.IQ_USER }}
+      IQ_PASS: ${{ secrets.IQ_PASS }}
+      IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
   
-      - name: Run Nexus IQ Stage Release Scan
+      - name: Find CLI Jar
         shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
-          CLI_PATH: ${{ steps.find_cli.outputs.CLI_PATH }}
-          PROJ_PATH: ${{ steps.find_proj.outputs.PROJ_PATH }}
         run: |
-          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ_PATH%" -o json > iq-stage-release.json
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+            set "CLI=%%F"
+            goto :found_cli
+          )
+          echo CLI jar not found!
+          exit /b 1
+          :found_cli
+          echo CLI_PATH=%CLI%>>%GITHUB_ENV%
   
-      - name: Upload Stage Release JSON
+      - name: Find Project
+        shell: cmd
+        run: |
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set "PROJ=%%F"
+            goto :found_proj
+          )
+          echo Project not found!
+          exit /b 1
+          :found_proj
+          echo PROJ_PATH=%PROJ%>>%GITHUB_ENV%
+  
+      - name: Run Nexus Stage Release Scan
+        shell: cmd
+        run: |
+          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ_PATH%" -o json
+      - name: Upload Stage Release Scan
         uses: actions/upload-artifact@v4
         with:
           name: iq-stage-release.json
           path: iq-stage-release.json
   
-  # 4️⃣ Nexus Release Scan
   nexus-release:
     name: Nexus IQ – Release
     runs-on: self-hosted
     needs: build-test
+    env:
+      IQ_USER: ${{ secrets.IQ_USER }}
+      IQ_PASS: ${{ secrets.IQ_PASS }}
+      IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
   
-      - name: Run Nexus IQ Release Scan
+      - name: Find CLI Jar
         shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
-          CLI_PATH: ${{ steps.find_cli.outputs.CLI_PATH }}
-          PROJ_PATH: ${{ steps.find_proj.outputs.PROJ_PATH }}
         run: |
-          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ_PATH%" -o json > iq-release.json
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+            set "CLI=%%F"
+            goto :found_cli
+          )
+          echo CLI jar not found!
+          exit /b 1
+          :found_cli
+          echo CLI_PATH=%CLI%>>%GITHUB_ENV%
   
-      - name: Upload Release JSON
+      - name: Find Project
+        shell: cmd
+        run: |
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set "PROJ=%%F"
+            goto :found_proj
+          )
+          echo Project not found!
+          exit /b 1
+          :found_proj
+          echo PROJ_PATH=%PROJ%>>%GITHUB_ENV%
+  
+      - name: Run Nexus Release Scan
+        shell: cmd
+        run: |
+          java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ_PATH%" -o json
+      - name: Upload Release Scan
         uses: actions/upload-artifact@v4
         with:
           name: iq-release.json
