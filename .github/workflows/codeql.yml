@@ -202,8 +202,11 @@ jobs:
           set "CLI="
           for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
             set "CLI=%%F"
-            goto :found_cli
+            goto found_cli
           )
+          echo CLI Jar not found!
+          exit /b 1
+          found_cli:
           echo Found CLI: %CLI%
           setx CLI "%CLI%"
       - name: Find csproj
