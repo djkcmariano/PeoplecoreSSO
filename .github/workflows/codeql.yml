@@ -149,26 +149,26 @@ jobs:
           args: --report-format=json --report-path=gitleaks-results.json
 
   # -------------------
-  # 2️⃣ Nexus Lifecycle Scan
+  # 2️⃣ Nexus Lifecycle Scan (DRY)
   # -------------------
   nexus-lifecycle:
     name: Nexus Lifecycle Scan
     runs-on: self-hosted
     needs: build-test
-  
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-  
+
       - name: Ensure NuGet CLI
         shell: cmd
         run: |
           if not exist nuget.exe (
             curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
           )
-  
+
       - name: Restore NuGet Packages
         shell: cmd
         run: |
@@ -178,13 +178,16 @@ jobs:
           )
           :found
           nuget.exe restore "%PROJ%" -PackagesDirectory Packages
-  
+
       - name: Build Project
         shell: cmd
         run: |
           dotnet build "%PROJ%" --configuration Release --no-restore
-  
-      - name: Run Nexus IQ Scans
+
+      # -------------------
+      # Reusable Nexus scan step
+      # -------------------
+      - &nexus-scan-step
         shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
@@ -192,25 +195,49 @@ jobs:
           IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
         run: |
           set CLI=%GITHUB_WORKSPACE%\tools\cli.jar
-  
-          REM Extract repo name only
           for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
-  
-          REM Find csproj
           for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
             set PROJ=%%F
             goto :found
           )
           :found
-  
           echo App Name: %APP_NAME%
           echo Project: %PROJ%
-  
-          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ%" -o json > iq-source.json
+
+      # -------------------
+      # Source Scan
+      # -------------------
+      - <<: *nexus-scan-step
+        name: Nexus IQ – Source
+        run: |
+          %CLI% -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ%" -o json > iq-source.json
+
+      # -------------------
+      # Build Scan
+      # -------------------
+      - <<: *nexus-scan-step
+        name: Nexus IQ – Build
+        run: |
           java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ%" -o json > iq-build.json
+
+      # -------------------
+      # Stage Release Scan (develop PR or push)
+      # -------------------
+      - <<: *nexus-scan-step
+        name: Nexus IQ – Stage Release
+        if: (github.event_name == 'pull_request' && github.base_ref == 'develop') || (github.event_name == 'push' && github.ref == 'refs/heads/develop')
+        run: |
           java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ%" -o json > iq-stage-release.json
+
+      # -------------------
+      # Release Scan (main PR or push)
+      # -------------------
+      - <<: *nexus-scan-step
+        name: Nexus IQ – Release
+        if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: |
           java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ%" -o json > iq-release.json
-  
+
       - name: Upload Nexus IQ Reports
         uses: actions/upload-artifact@v4
         with:
@@ -220,6 +247,7 @@ jobs:
             iq-build.json
             iq-stage-release.json
             iq-release.json
+
 
 
 
