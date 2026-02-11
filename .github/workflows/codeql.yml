@@ -193,10 +193,10 @@ jobs:
         run: |
           set CLI=%GITHUB_WORKSPACE%\tools\cli.jar
   
-          REM Extract repo name only (owner/repo → repo)
+          REM Extract repo name only
           for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
   
-          REM Find csproj dynamically
+          REM Find csproj
           for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
             set PROJ=%%F
             goto :found
@@ -220,6 +220,7 @@ jobs:
             iq-build.json
             iq-stage-release.json
             iq-release.json
+
 
 
   # -------------------
