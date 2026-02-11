@@ -148,6 +148,9 @@ jobs:
           verbose: true
           args: --report-format=json --report-path=gitleaks-results.json
 
+  # -------------------
+  # 2️⃣ Nexus Lifecycle Scan (DRY, Windows-safe)
+  # -------------------
   nexus-lifecycle:
     name: Nexus Lifecycle Scan
     runs-on: self-hosted
@@ -170,7 +173,7 @@ jobs:
         shell: cmd
         run: |
           for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
-            set PROJ=%%F
+            set "PROJ=%%F"
             goto :found
           )
           :found
@@ -181,17 +184,18 @@ jobs:
         run: |
           dotnet build "%PROJ%" --configuration Release --no-restore
   
-      - name: Find Nexus CLI
+      - name: Find Nexus CLI Jar
         shell: cmd
         run: |
-          REM Find cli.jar anywhere under the repo
+          set "CLI_PATH="
           for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
-              set CLI=%%F
-              goto :found
+            set "CLI_PATH=%%F"
+            goto :found_cli
           )
-          :found
-          echo CLI Jar found at %CLI%
-          set CLI_PATH=%CLI%
+          echo CLI not found!
+          exit /b 1
+          :found_cli
+          echo Found CLI Jar at "%CLI_PATH%"
   
       - name: Run Nexus IQ Scans
         shell: cmd
@@ -200,25 +204,26 @@ jobs:
           IQ_PASS: ${{ secrets.IQ_PASS }}
           IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
         run: |
-          REM Extract repo name only
-          for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
+          REM Extract repo name
+          for %%R in ("%GITHUB_REPOSITORY%") do set "APP_NAME=%%~nxR"
   
-          REM Find csproj file (already set in previous step)
-          echo Project: %PROJ%
+          REM Run all stages
+          java -jar "%CLI_PATH%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ%" -o json > iq-source.json
+          java -jar "%CLI_PATH%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ%" -o json > iq-build.json
   
-          REM Find cli.jar dynamically
-          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
-              set CLI=%%F
-              goto :found_cli
+          REM Stage Release: only for PRs to develop OR pushes to develop
+          if "%GITHUB_EVENT_NAME%"=="pull_request" if "%GITHUB_BASE_REF%"=="develop" (
+            java -jar "%CLI_PATH%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ%" -o json > iq-stage-release.json
+          ) else if "%GITHUB_EVENT_NAME%"=="push" if "%GITHUB_REF%"=="refs/heads/develop" (
+            java -jar "%CLI_PATH%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ%" -o json > iq-stage-release.json
           )
-          :found_cli
-          echo Using CLI: %CLI%
   
-          REM Run all Nexus IQ scans
-          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ%" -o json > iq-source.json
-          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ%" -o json > iq-build.json
-          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ%" -o json > iq-stage-release.json
-          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ%" -o json > iq-release.json
+          REM Release: only for PRs to main OR pushes to main
+          if "%GITHUB_EVENT_NAME%"=="pull_request" if "%GITHUB_BASE_REF%"=="main" (
+            java -jar "%CLI_PATH%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ%" -o json > iq-release.json
+          ) else if "%GITHUB_EVENT_NAME%"=="push" if "%GITHUB_REF%"=="refs/heads/main" (
+            java -jar "%CLI_PATH%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ%" -o json > iq-release.json
+          )
   
       - name: Upload Nexus IQ Reports
         uses: actions/upload-artifact@v4
@@ -229,9 +234,6 @@ jobs:
             iq-build.json
             iq-stage-release.json
             iq-release.json
-
-
-
 
   # -------------------
   # 3️⃣ Optional Deploy
