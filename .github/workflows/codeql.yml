@@ -170,7 +170,6 @@ jobs:
           :found_cli
           echo CLI_PATH=%CLI%>>%GITHUB_ENV%
           echo Found CLI at %CLI%
-
   
       - name: Find Project
         shell: cmd
@@ -188,12 +187,14 @@ jobs:
         shell: cmd
         run: |
           java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ_PATH%" -o json
+  
       - name: Upload Source Scan
         uses: actions/upload-artifact@v4
         with:
           name: iq-source.json
           path: iq-source.json
   
+  # 2️⃣ Nexus Build Scan
   nexus-build:
     name: Nexus IQ – Build
     runs-on: self-hosted
@@ -209,7 +210,7 @@ jobs:
       - name: Find CLI Jar
         shell: cmd
         run: |
-          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+          for /r "%GITHUB_WORKSPACE%\tools" %%F in (cli.jar) do (
             set "CLI=%%F"
             goto :found_cli
           )
@@ -234,16 +235,19 @@ jobs:
         shell: cmd
         run: |
           java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ_PATH%" -o json
+  
       - name: Upload Build Scan
         uses: actions/upload-artifact@v4
         with:
           name: iq-build.json
           path: iq-build.json
   
+  # 3️⃣ Nexus Stage Release Scan (only on develop)
   nexus-stage-release:
     name: Nexus IQ – Stage Release
     runs-on: self-hosted
     needs: build-test
+    if: github.event_name == 'pull_request' && github.base_ref == 'develop' || github.event_name == 'push' && github.ref == 'refs/heads/develop'
     env:
       IQ_USER: ${{ secrets.IQ_USER }}
       IQ_PASS: ${{ secrets.IQ_PASS }}
@@ -255,7 +259,7 @@ jobs:
       - name: Find CLI Jar
         shell: cmd
         run: |
-          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+          for /r "%GITHUB_WORKSPACE%\tools" %%F in (cli.jar) do (
             set "CLI=%%F"
             goto :found_cli
           )
@@ -280,16 +284,19 @@ jobs:
         shell: cmd
         run: |
           java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ_PATH%" -o json
+  
       - name: Upload Stage Release Scan
         uses: actions/upload-artifact@v4
         with:
           name: iq-stage-release.json
           path: iq-stage-release.json
   
+  # 4️⃣ Nexus Release Scan (only on main)
   nexus-release:
     name: Nexus IQ – Release
     runs-on: self-hosted
     needs: build-test
+    if: github.event_name == 'pull_request' && github.base_ref == 'main' || github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       IQ_USER: ${{ secrets.IQ_USER }}
       IQ_PASS: ${{ secrets.IQ_PASS }}
@@ -301,7 +308,7 @@ jobs:
       - name: Find CLI Jar
         shell: cmd
         run: |
-          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+          for /r "%GITHUB_WORKSPACE%\tools" %%F in (cli.jar) do (
             set "CLI=%%F"
             goto :found_cli
           )
@@ -326,6 +333,7 @@ jobs:
         shell: cmd
         run: |
           java -jar "%CLI_PATH%" -i "%GITHUB_REPOSITORY%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ_PATH%" -o json
+  
       - name: Upload Release Scan
         uses: actions/upload-artifact@v4
         with:
