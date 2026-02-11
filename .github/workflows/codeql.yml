@@ -153,18 +153,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
       - name: Find CLI Jar
+        id: find_cli
         shell: cmd
         run: |
-          set "CLI="
           for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
-            set "CLI=%%F"
-            goto :found_cli
+            echo Found CLI: %%F
+            echo "CLI_PATH=%%F" >> %GITHUB_ENV%
+            exit /b 0
           )
           echo CLI Jar not found!
           exit /b 1
-          :found_cli
-          echo Found CLI: %CLI%
-          setx CLI "%CLI%"
+
       - name: Find csproj
         shell: cmd
         run: |
