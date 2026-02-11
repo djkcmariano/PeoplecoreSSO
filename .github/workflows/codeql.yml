@@ -171,26 +171,45 @@ jobs:
   
       - name: Restore NuGet Packages
         shell: cmd
-        run: nuget.exe restore AuthServer.csproj -PackagesDirectory Packages
+        run: |
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set PROJ=%%F
+            goto :found
+          )
+          :found
+          nuget.exe restore "%PROJ%" -PackagesDirectory Packages
   
       - name: Build Project
         shell: cmd
-        run: dotnet build AuthServer.csproj --configuration Release --no-restore
+        run: |
+          dotnet build "%PROJ%" --configuration Release --no-restore
   
       - name: Run Nexus IQ Scans
         shell: cmd
         env:
           IQ_USER: ${{ secrets.IQ_USER }}
           IQ_PASS: ${{ secrets.IQ_PASS }}
+          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
         run: |
-          set CLI="%GITHUB_WORKSPACE%\tools\cli.jar"
-          set PROJ="%GITHUB_WORKSPACE%\AuthServer.csproj"
-          set OUT="%GITHUB_WORKSPACE%"
+          set CLI=%GITHUB_WORKSPACE%\tools\cli.jar
   
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t source  "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-source.json
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t build  " %GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-build.json
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t stage-release   "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-stage-release.json
-          java -jar %CLI% -i "PeoplecoreAuthServer" -s http://192.168.70.35:8070 -a %IQ_USER%:%IQ_PASS% -t release "%GITHUB_WORKSPACE%\AuthServer.csproj" -o json > iq-release.json
+          REM Extract repo name only (owner/repo → repo)
+          for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
+  
+          REM Find csproj dynamically
+          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
+            set PROJ=%%F
+            goto :found
+          )
+          :found
+  
+          echo App Name: %APP_NAME%
+          echo Project: %PROJ%
+  
+          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ%" -o json > iq-source.json
+          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ%" -o json > iq-build.json
+          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ%" -o json > iq-stage-release.json
+          java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ%" -o json > iq-release.json
   
       - name: Upload Nexus IQ Reports
         uses: actions/upload-artifact@v4
@@ -199,7 +218,7 @@ jobs:
           path: |
             iq-source.json
             iq-build.json
-            iq-stage.json
+            iq-stage-release.json
             iq-release.json
 
 
