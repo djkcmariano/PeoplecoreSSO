@@ -161,7 +161,7 @@ jobs:
       - name: Find CLI Jar
         shell: cmd
         run: |
-          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+          for /r "%GITHUB_WORKSPACE%\tools" %%F in (cli.jar) do (
             set "CLI=%%F"
             goto :found_cli
           )
@@ -169,6 +169,8 @@ jobs:
           exit /b 1
           :found_cli
           echo CLI_PATH=%CLI%>>%GITHUB_ENV%
+          echo Found CLI at %CLI%
+
   
       - name: Find Project
         shell: cmd
