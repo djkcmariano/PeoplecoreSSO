@@ -152,20 +152,20 @@ jobs:
     name: Nexus Lifecycle Scan
     runs-on: self-hosted
     needs: build-test
-
+  
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
+  
       - name: Ensure NuGet CLI
         shell: cmd
         run: |
           if not exist nuget.exe (
             curl -L -o nuget.exe https://dist.nuget.org/win-x86-commandline/latest/nuget.exe
           )
-
+  
       - name: Restore NuGet Packages
         shell: cmd
         run: |
@@ -175,58 +175,51 @@ jobs:
           )
           :found
           nuget.exe restore "%PROJ%" -PackagesDirectory Packages
-
+  
       - name: Build Project
         shell: cmd
         run: |
           dotnet build "%PROJ%" --configuration Release --no-restore
-
-      - name: Nexus IQ – Source
+  
+      - name: Find Nexus CLI
         shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
         run: |
-          set CLI=%GITHUB_WORKSPACE%\tools\cli.jar
-          dir "%GITHUB_WORKSPACE%\tools"
-          for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
-          for /r "%GITHUB_WORKSPACE%" %%F in (*.csproj) do (
-            set PROJ=%%F
-            goto :found
+          REM Find cli.jar anywhere under the repo
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+              set CLI=%%F
+              goto :found
           )
           :found
+          echo CLI Jar found at %CLI%
+          set CLI_PATH=%CLI%
+  
+      - name: Run Nexus IQ Scans
+        shell: cmd
+        env:
+          IQ_USER: ${{ secrets.IQ_USER }}
+          IQ_PASS: ${{ secrets.IQ_PASS }}
+          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
+        run: |
+          REM Extract repo name only
+          for %%R in ("%GITHUB_REPOSITORY%") do set APP_NAME=%%~nxR
+  
+          REM Find csproj file (already set in previous step)
+          echo Project: %PROJ%
+  
+          REM Find cli.jar dynamically
+          for /r "%GITHUB_WORKSPACE%" %%F in (cli.jar) do (
+              set CLI=%%F
+              goto :found_cli
+          )
+          :found_cli
+          echo Using CLI: %CLI%
+  
+          REM Run all Nexus IQ scans
           java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t source "%PROJ%" -o json > iq-source.json
-
-      - name: Nexus IQ – Build
-        shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
-        run: |
           java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t build "%PROJ%" -o json > iq-build.json
-
-      - name: Nexus IQ – Stage Release
-        if: (github.event_name == 'pull_request' && github.base_ref == 'develop') || (github.event_name == 'push' && github.ref == 'refs/heads/develop')
-        shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
-        run: |
           java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t stage-release "%PROJ%" -o json > iq-stage-release.json
-
-      - name: Nexus IQ – Release
-        if: (github.event_name == 'pull_request' && github.base_ref == 'main') || (github.event_name == 'push' && github.ref == 'refs/heads/main')
-        shell: cmd
-        env:
-          IQ_USER: ${{ secrets.IQ_USER }}
-          IQ_PASS: ${{ secrets.IQ_PASS }}
-          IQ_SERVER_URL: ${{ secrets.IQ_SERVER_URL }}
-        run: |
           java -jar "%CLI%" -i "%APP_NAME%" -s "%IQ_SERVER_URL%" -a %IQ_USER%:%IQ_PASS% -t release "%PROJ%" -o json > iq-release.json
-
+  
       - name: Upload Nexus IQ Reports
         uses: actions/upload-artifact@v4
         with:
